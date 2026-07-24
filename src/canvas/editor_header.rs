@@ -1,0 +1,412 @@
+use gpui::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButton};
+
+use crate::app::NotesApp;
+use crate::helpers::{calculate_line_text_offset, hash_str};
+use crate::models::{ActiveField, NoteContent};
+
+impl NotesApp {
+    pub(crate) fn build_section_name_editor(
+        &self,
+        is_section_name_focused: bool,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let is_focused = is_section_name_focused;
+        let text_div = |t: String| {
+            div()
+                .text_size(px(11.0))
+                .font_weight(gpui::FontWeight::BOLD)
+                .text_color(rgb(0xffffff))
+                .child(t)
+        };
+        let selected_div = |t: String| {
+            div()
+                .text_size(px(11.0))
+                .font_weight(gpui::FontWeight::BOLD)
+                .text_color(rgb(0xffffff))
+                .bg(rgb(0x004c87))
+                .child(t)
+        };
+
+        if self.edit_section_name.is_empty() {
+            div()
+                .id("section-name-placeholder")
+                .flex()
+                .items_center()
+                .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| {
+                    this.active_field = ActiveField::SectionName;
+                    this.focus_handle.focus(window, cx);
+                    this.edit_section_name_cursor = 0;
+                    this.edit_section_name_anchor = None;
+                    this.is_selecting_section_name = false;
+                    cx.notify();
+                    cx.stop_propagation();
+                }))
+                .child(
+                    div()
+                        .text_size(px(11.0))
+                        .font_weight(gpui::FontWeight::BOLD)
+                        .text_color(rgb(0x808080))
+                        .child("Section Name..."),
+                )
+                .child(if is_focused {
+                    div().w(px(1.0)).h(px(12.0)).bg(rgb(0x0078d4))
+                } else {
+                    div()
+                })
+        } else {
+            let sel_start = self
+                .edit_section_name_anchor
+                .map(|a| a.min(self.edit_section_name_cursor))
+                .unwrap_or(self.edit_section_name_cursor);
+            let sel_end = self
+                .edit_section_name_anchor
+                .map(|a| a.max(self.edit_section_name_cursor))
+                .unwrap_or(self.edit_section_name_cursor);
+            let has_selection = sel_start < sel_end;
+            let text = &self.edit_section_name;
+            let cursor = self.edit_section_name_cursor;
+            let chars: Vec<char> = text.chars().collect();
+
+            let before: String = chars[..sel_start].iter().collect();
+            let selected: String = chars[sel_start..sel_end].iter().collect();
+            let after: String = chars[sel_end..].iter().collect();
+
+            let mut els: Vec<AnyElement> = Vec::new();
+            if is_focused && cursor == sel_start && !has_selection {
+                els.push(text_div(before.clone()).into_any_element());
+                els.push(
+                    div()
+                        .w(px(1.0))
+                        .h(px(12.0))
+                        .bg(rgb(0x0078d4))
+                        .flex_shrink_0()
+                        .into_any_element(),
+                );
+                els.push(text_div(after.clone()).into_any_element());
+            } else if has_selection {
+                els.push(text_div(before.clone()).into_any_element());
+                els.push(selected_div(selected.clone()).into_any_element());
+                els.push(text_div(after.clone()).into_any_element());
+            } else {
+                els.push(text_div(text.clone()).into_any_element());
+            }
+
+            div()
+                .id("section-name-editor")
+                .flex()
+                .items_center()
+                .on_mouse_down(MouseButton::Left, cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
+                    this.active_field = ActiveField::SectionName;
+                    this.focus_handle.focus(window, cx);
+                    let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
+                    let rel_x = (event.position.x.as_f32() - sidebar_w - 20.0).max(0.0);
+                    let click_idx = calculate_line_text_offset(rel_x, &this.edit_section_name);
+                    this.edit_section_name_cursor = click_idx;
+                    this.edit_section_name_anchor = Some(click_idx);
+                    this.is_selecting_section_name = true;
+                    cx.notify();
+                    cx.stop_propagation();
+                }))
+                .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
+                    if this.is_selecting_section_name {
+                        let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
+                        let rel_x = (event.position.x.as_f32() - sidebar_w - 20.0).max(0.0);
+                        let drag_idx = calculate_line_text_offset(rel_x, &this.edit_section_name);
+                        this.edit_section_name_cursor = drag_idx;
+                        cx.notify();
+                        cx.stop_propagation();
+                    }
+                }))
+                .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                    if this.is_selecting_section_name {
+                        if this.edit_section_name_anchor == Some(this.edit_section_name_cursor) {
+                            this.edit_section_name_anchor = None;
+                        }
+                        this.is_selecting_section_name = false;
+                        cx.notify();
+                        cx.stop_propagation();
+                    }
+                }))
+                .children(els)
+        }
+    }
+
+    pub(crate) fn build_section_tabs(
+        &mut self,
+        content: &NoteContent,
+        is_section_name_focused: bool,
+        cx: &mut Context<Self>,
+    ) -> impl IntoElement {
+        let mut tabs = Vec::new();
+        for sec in &content.sections {
+            let sec_id = sec.id.clone();
+            let is_active = Some(&sec_id) == self.active_section_id.as_ref();
+            let click_id = sec_id.clone();
+            let delete_id = sec_id.clone();
+
+            let mut tab_el = div()
+                .id(("sec-tab", hash_str(&sec_id)))
+                .px(px(6.0))
+                .py(px(2.0))
+                .text_size(px(11.0))
+                .bg(if is_active {
+                    rgb(0x1e1e1e)
+                } else {
+                    rgb(0x2d2d2d)
+                });
+            if is_active {
+                tab_el = tab_el.border_t_2().border_color(rgb(0x0078d4));
+            }
+            tab_el = tab_el
+                .text_color(if is_active {
+                    rgb(0xffffff)
+                } else {
+                    rgb(0x808080)
+                })
+                .font_weight(if is_active {
+                    gpui::FontWeight::BOLD
+                } else {
+                    gpui::FontWeight::NORMAL
+                })
+                .cursor_pointer()
+                .on_click(cx.listener(move |this, _, _, cx| {
+                    this.switch_to_section(click_id.clone(), cx);
+                }))
+                .flex()
+                .items_center()
+                .gap(px(6.0));
+
+            if is_active {
+                tab_el = tab_el.child(self.build_section_name_editor(is_section_name_focused, cx));
+            } else {
+                tab_el = tab_el.child(sec.name.clone());
+            }
+
+            if content.sections.len() > 1 {
+                tab_el = tab_el.child(
+                    div()
+                        .id(("delete-sec", hash_str(&sec_id)))
+                        .text_color(rgb(0xff6b6b))
+                        .hover(|s| s.text_color(rgb(0xff0000)))
+                        .child("×")
+                        .on_click(cx.listener(move |this, _, _, cx| {
+                            this.delete_section(delete_id.clone(), cx);
+                            cx.stop_propagation();
+                        })),
+                );
+            }
+
+            tabs.push(tab_el.into_any_element());
+        }
+
+        tabs.push(
+            div()
+                .id("add-section-btn")
+                .px(px(6.0))
+                .py(px(2.0))
+                .text_size(px(11.0))
+                .bg(rgb(0x252525))
+                .hover(|s| s.bg(rgb(0x353535)))
+                .text_color(rgb(0x0078d4))
+                .cursor_pointer()
+                .on_click(cx.listener(|this, _, _, cx| {
+                    this.add_section(cx);
+                }))
+                .child("+")
+                .into_any_element(),
+        );
+
+        let left_side = div().flex().flex_row().gap(px(4.0)).children(tabs);
+
+        let right_side = div()
+            .flex()
+            .gap(px(6.0))
+            .child(
+                div()
+                    .id("save-btn")
+                    .px(px(5.0))
+                    .py(px(2.0))
+                    .bg(rgb(0x0078d4))
+                    .hover(|s| s.bg(rgb(0x106ebe)))
+                    .rounded(px(4.0))
+                    .cursor_pointer()
+                    .text_size(px(11.0))
+                    .text_color(rgb(0xffffff))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.save_edit(cx);
+                    }))
+                    .child("Save"),
+            )
+            .child(
+                div()
+                    .id("cancel-btn")
+                    .px(px(5.0))
+                    .py(px(2.0))
+                    .bg(rgb(0x404040))
+                    .hover(|s| s.bg(rgb(0x505050)))
+                    .rounded(px(4.0))
+                    .cursor_pointer()
+                    .text_size(px(11.0))
+                    .text_color(rgb(0xd4d4d4))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.cancel_edit(cx);
+                    }))
+                    .child("Cancel"),
+            );
+
+        div()
+            .flex()
+            .flex_row()
+            .justify_between()
+            .items_center()
+            .child(left_side)
+            .child(right_side)
+    }
+
+    pub(crate) fn build_heading_editor(
+        &self,
+        is_heading_focused: bool,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        if self.edit_heading.is_empty() {
+            div()
+                .id("heading-placeholder")
+                .flex()
+                .items_center()
+                .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| {
+                    this.active_field = ActiveField::Heading;
+                    this.focus_handle.focus(window, cx);
+                    this.edit_heading_cursor = 0;
+                    this.edit_heading_anchor = None;
+                    this.is_selecting_heading = false;
+                    cx.notify();
+                    cx.stop_propagation();
+                }))
+                .child(
+                    div()
+                        .text_size(px(20.0))
+                        .text_color(rgb(0x808080))
+                        .child("Heading..."),
+                )
+                .child(if is_heading_focused {
+                    div().w(px(1.0)).h(px(20.0)).bg(rgb(0x0078d4))
+                } else {
+                    div()
+                })
+                .into_any_element()
+        } else {
+            let sel_start = self
+                .edit_heading_anchor
+                .map(|a| a.min(self.edit_heading_cursor))
+                .unwrap_or(self.edit_heading_cursor);
+            let sel_end = self
+                .edit_heading_anchor
+                .map(|a| a.max(self.edit_heading_cursor))
+                .unwrap_or(self.edit_heading_cursor);
+            let has_selection = sel_start < sel_end;
+            let text = &self.edit_heading;
+            let cursor = self.edit_heading_cursor;
+            let chars: Vec<char> = text.chars().collect();
+
+            let before: String = chars[..sel_start].iter().collect();
+            let selected: String = chars[sel_start..sel_end].iter().collect();
+            let after: String = chars[sel_end..].iter().collect();
+
+            let mut elements: Vec<AnyElement> = Vec::new();
+            if is_heading_focused && cursor == sel_start && !has_selection {
+                elements.push(
+                    div()
+                        .text_size(px(20.0))
+                        .text_color(rgb(0xffffff))
+                        .child(before.clone())
+                        .into_any_element(),
+                );
+                elements.push(
+                    div()
+                        .w(px(1.0))
+                        .h(px(20.0))
+                        .bg(rgb(0x0078d4))
+                        .flex_shrink_0()
+                        .into_any_element(),
+                );
+                elements.push(
+                    div()
+                        .text_size(px(20.0))
+                        .text_color(rgb(0xffffff))
+                        .child(after.clone())
+                        .into_any_element(),
+                );
+            } else if has_selection {
+                elements.push(
+                    div()
+                        .text_size(px(20.0))
+                        .text_color(rgb(0xffffff))
+                        .child(before.clone())
+                        .into_any_element(),
+                );
+                elements.push(
+                    div()
+                        .text_size(px(20.0))
+                        .text_color(rgb(0xffffff))
+                        .bg(rgb(0x004c87))
+                        .child(selected.clone())
+                        .into_any_element(),
+                );
+                elements.push(
+                    div()
+                        .text_size(px(20.0))
+                        .text_color(rgb(0xffffff))
+                        .child(after.clone())
+                        .into_any_element(),
+                );
+            } else {
+                elements.push(
+                    div()
+                        .text_size(px(20.0))
+                        .text_color(rgb(0xffffff))
+                        .child(text.clone())
+                        .into_any_element(),
+                );
+            }
+
+            div()
+                .id("heading-editor")
+                .flex()
+                .items_center()
+                .on_mouse_down(MouseButton::Left, cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
+                    this.active_field = ActiveField::Heading;
+                    this.focus_handle.focus(window, cx);
+                    let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
+                    let rel_x = (event.position.x.as_f32() - sidebar_w - 10.0).max(0.0);
+                    let click_idx = calculate_line_text_offset(rel_x, &this.edit_heading);
+                    this.edit_heading_cursor = click_idx;
+                    this.edit_heading_anchor = Some(click_idx);
+                    this.is_selecting_heading = true;
+                    cx.notify();
+                    cx.stop_propagation();
+                }))
+                .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
+                    if this.is_selecting_heading {
+                        let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
+                        let rel_x = (event.position.x.as_f32() - sidebar_w - 10.0).max(0.0);
+                        let drag_idx = calculate_line_text_offset(rel_x, &this.edit_heading);
+                        this.edit_heading_cursor = drag_idx;
+                        cx.notify();
+                        cx.stop_propagation();
+                    }
+                }))
+                .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
+                    if this.is_selecting_heading {
+                        if this.edit_heading_anchor == Some(this.edit_heading_cursor) {
+                            this.edit_heading_anchor = None;
+                        }
+                        this.is_selecting_heading = false;
+                        cx.notify();
+                        cx.stop_propagation();
+                    }
+                }))
+                .children(elements)
+                .into_any_element()
+        }
+    }
+}

@@ -145,13 +145,13 @@ impl NotesApp {
                 } else if this.is_selecting_heading {
                     let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
                     let rel_x = (event.position.x.as_f32() - sidebar_w - 10.0).max(0.0);
-                    let drag_idx = calculate_line_text_offset(rel_x, &this.edit_heading);
+                    let drag_idx = calculate_line_text_offset(rel_x, &this.edit_heading, 20.0);
                     this.edit_heading_cursor = drag_idx;
                     changed = true;
                 } else if this.is_selecting_section_name {
                     let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
                     let rel_x = (event.position.x.as_f32() - sidebar_w - 20.0).max(0.0);
-                    let drag_idx = calculate_line_text_offset(rel_x, &this.edit_section_name);
+                    let drag_idx = calculate_line_text_offset(rel_x, &this.edit_section_name, 11.0);
                     this.edit_section_name_cursor = drag_idx;
                     changed = true;
                 } else if this.is_panning {

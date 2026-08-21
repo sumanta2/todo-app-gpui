@@ -1,7 +1,10 @@
 use gpui::Context;
 
 use crate::app::NotesApp;
-use crate::helpers::{get_selection_range, replace_range};
+use crate::helpers::{
+    get_selection_range, move_cursor_down, move_cursor_up, move_cursor_word_left,
+    move_cursor_word_right, replace_range,
+};
 use crate::models::{load_canvas_items, load_note_content, ActiveField, CanvasItem, TextItem};
 
 impl NotesApp {
@@ -221,41 +224,87 @@ impl NotesApp {
 
         // Navigation
         if key.eq_ignore_ascii_case("left") {
+            let next_pos = if control {
+                move_cursor_word_left(text, *cursor)
+            } else if !shift {
+                if let Some((start, _)) = get_selection_range(*cursor, *anchor) {
+                    start
+                } else if *cursor > 0 {
+                    *cursor - 1
+                } else {
+                    0
+                }
+            } else if *cursor > 0 {
+                *cursor - 1
+            } else {
+                0
+            };
+
             if shift {
                 if anchor.is_none() {
                     *anchor = Some(*cursor);
                 }
-                if *cursor > 0 {
-                    *cursor -= 1;
-                }
             } else {
-                if let Some((start, _)) = get_selection_range(*cursor, *anchor) {
-                    *cursor = start;
-                } else if *cursor > 0 {
-                    *cursor -= 1;
-                }
                 *anchor = None;
             }
+            *cursor = next_pos;
             cx.notify();
             return;
         } else if key.eq_ignore_ascii_case("right") {
             let len = text.chars().count();
+            let next_pos = if control {
+                move_cursor_word_right(text, *cursor)
+            } else if !shift {
+                if let Some((_, end)) = get_selection_range(*cursor, *anchor) {
+                    end
+                } else if *cursor < len {
+                    *cursor + 1
+                } else {
+                    len
+                }
+            } else if *cursor < len {
+                *cursor + 1
+            } else {
+                len
+            };
+
             if shift {
                 if anchor.is_none() {
                     *anchor = Some(*cursor);
                 }
-                if *cursor < len {
-                    *cursor += 1;
-                }
             } else {
-                if let Some((_, end)) = get_selection_range(*cursor, *anchor) {
-                    *cursor = end;
-                } else if *cursor < len {
-                    *cursor += 1;
-                }
                 *anchor = None;
             }
+            *cursor = next_pos;
             cx.notify();
+            return;
+        } else if key.eq_ignore_ascii_case("up") {
+            if is_multiline {
+                let next_pos = move_cursor_up(text, *cursor);
+                if shift {
+                    if anchor.is_none() {
+                        *anchor = Some(*cursor);
+                    }
+                } else {
+                    *anchor = None;
+                }
+                *cursor = next_pos;
+                cx.notify();
+            }
+            return;
+        } else if key.eq_ignore_ascii_case("down") {
+            if is_multiline {
+                let next_pos = move_cursor_down(text, *cursor);
+                if shift {
+                    if anchor.is_none() {
+                        *anchor = Some(*cursor);
+                    }
+                } else {
+                    *anchor = None;
+                }
+                *cursor = next_pos;
+                cx.notify();
+            }
             return;
         } else if key.eq_ignore_ascii_case("home") {
             if shift {

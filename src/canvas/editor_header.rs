@@ -32,15 +32,18 @@ impl NotesApp {
                 .id("section-name-placeholder")
                 .flex()
                 .items_center()
-                .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| {
-                    this.active_field = ActiveField::SectionName;
-                    this.focus_handle.focus(window, cx);
-                    this.edit_section_name_cursor = 0;
-                    this.edit_section_name_anchor = None;
-                    this.is_selecting_section_name = false;
-                    cx.notify();
-                    cx.stop_propagation();
-                }))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, _, window, cx| {
+                        this.active_field = ActiveField::SectionName;
+                        this.focus_handle.focus(window, cx);
+                        this.edit_section_name_cursor = 0;
+                        this.edit_section_name_anchor = None;
+                        this.is_selecting_section_name = false;
+                        cx.notify();
+                        cx.stop_propagation();
+                    }),
+                )
                 .child(
                     div()
                         .text_size(px(11.0))
@@ -95,38 +98,47 @@ impl NotesApp {
                 .id("section-name-editor")
                 .flex()
                 .items_center()
-                .on_mouse_down(MouseButton::Left, cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
-                    this.active_field = ActiveField::SectionName;
-                    this.focus_handle.focus(window, cx);
-                    let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
-                    let rel_x = (event.position.x.as_f32() - sidebar_w - 20.0).max(0.0);
-                    let click_idx = calculate_line_text_offset(rel_x, &this.edit_section_name);
-                    this.edit_section_name_cursor = click_idx;
-                    this.edit_section_name_anchor = Some(click_idx);
-                    this.is_selecting_section_name = true;
-                    cx.notify();
-                    cx.stop_propagation();
-                }))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
+                        this.active_field = ActiveField::SectionName;
+                        this.focus_handle.focus(window, cx);
+                        let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
+                        let rel_x = (event.position.x.as_f32() - sidebar_w - 20.0).max(0.0);
+                        let click_idx =
+                            calculate_line_text_offset(rel_x, &this.edit_section_name, 11.0);
+                        this.edit_section_name_cursor = click_idx;
+                        this.edit_section_name_anchor = Some(click_idx);
+                        this.is_selecting_section_name = true;
+                        cx.notify();
+                        cx.stop_propagation();
+                    }),
+                )
                 .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
                     if this.is_selecting_section_name {
                         let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
                         let rel_x = (event.position.x.as_f32() - sidebar_w - 20.0).max(0.0);
-                        let drag_idx = calculate_line_text_offset(rel_x, &this.edit_section_name);
+                        let drag_idx =
+                            calculate_line_text_offset(rel_x, &this.edit_section_name, 11.0);
                         this.edit_section_name_cursor = drag_idx;
                         cx.notify();
                         cx.stop_propagation();
                     }
                 }))
-                .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
-                    if this.is_selecting_section_name {
-                        if this.edit_section_name_anchor == Some(this.edit_section_name_cursor) {
-                            this.edit_section_name_anchor = None;
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(|this, _, _, cx| {
+                        if this.is_selecting_section_name {
+                            if this.edit_section_name_anchor == Some(this.edit_section_name_cursor)
+                            {
+                                this.edit_section_name_anchor = None;
+                            }
+                            this.is_selecting_section_name = false;
+                            cx.notify();
+                            cx.stop_propagation();
                         }
-                        this.is_selecting_section_name = false;
-                        cx.notify();
-                        cx.stop_propagation();
-                    }
-                }))
+                    }),
+                )
                 .children(els)
         }
     }
@@ -273,15 +285,18 @@ impl NotesApp {
                 .id("heading-placeholder")
                 .flex()
                 .items_center()
-                .on_mouse_down(MouseButton::Left, cx.listener(|this, _, window, cx| {
-                    this.active_field = ActiveField::Heading;
-                    this.focus_handle.focus(window, cx);
-                    this.edit_heading_cursor = 0;
-                    this.edit_heading_anchor = None;
-                    this.is_selecting_heading = false;
-                    cx.notify();
-                    cx.stop_propagation();
-                }))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, _, window, cx| {
+                        this.active_field = ActiveField::Heading;
+                        this.focus_handle.focus(window, cx);
+                        this.edit_heading_cursor = 0;
+                        this.edit_heading_anchor = None;
+                        this.is_selecting_heading = false;
+                        cx.notify();
+                        cx.stop_propagation();
+                    }),
+                )
                 .child(
                     div()
                         .text_size(px(20.0))
@@ -373,38 +388,44 @@ impl NotesApp {
                 .id("heading-editor")
                 .flex()
                 .items_center()
-                .on_mouse_down(MouseButton::Left, cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
-                    this.active_field = ActiveField::Heading;
-                    this.focus_handle.focus(window, cx);
-                    let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
-                    let rel_x = (event.position.x.as_f32() - sidebar_w - 10.0).max(0.0);
-                    let click_idx = calculate_line_text_offset(rel_x, &this.edit_heading);
-                    this.edit_heading_cursor = click_idx;
-                    this.edit_heading_anchor = Some(click_idx);
-                    this.is_selecting_heading = true;
-                    cx.notify();
-                    cx.stop_propagation();
-                }))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
+                        this.active_field = ActiveField::Heading;
+                        this.focus_handle.focus(window, cx);
+                        let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
+                        let rel_x = (event.position.x.as_f32() - sidebar_w - 10.0).max(0.0);
+                        let click_idx = calculate_line_text_offset(rel_x, &this.edit_heading, 20.0);
+                        this.edit_heading_cursor = click_idx;
+                        this.edit_heading_anchor = Some(click_idx);
+                        this.is_selecting_heading = true;
+                        cx.notify();
+                        cx.stop_propagation();
+                    }),
+                )
                 .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
                     if this.is_selecting_heading {
                         let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
                         let rel_x = (event.position.x.as_f32() - sidebar_w - 10.0).max(0.0);
-                        let drag_idx = calculate_line_text_offset(rel_x, &this.edit_heading);
+                        let drag_idx = calculate_line_text_offset(rel_x, &this.edit_heading, 20.0);
                         this.edit_heading_cursor = drag_idx;
                         cx.notify();
                         cx.stop_propagation();
                     }
                 }))
-                .on_mouse_up(MouseButton::Left, cx.listener(|this, _, _, cx| {
-                    if this.is_selecting_heading {
-                        if this.edit_heading_anchor == Some(this.edit_heading_cursor) {
-                            this.edit_heading_anchor = None;
+                .on_mouse_up(
+                    MouseButton::Left,
+                    cx.listener(|this, _, _, cx| {
+                        if this.is_selecting_heading {
+                            if this.edit_heading_anchor == Some(this.edit_heading_cursor) {
+                                this.edit_heading_anchor = None;
+                            }
+                            this.is_selecting_heading = false;
+                            cx.notify();
+                            cx.stop_propagation();
                         }
-                        this.is_selecting_heading = false;
-                        cx.notify();
-                        cx.stop_propagation();
-                    }
-                }))
+                    }),
+                )
                 .children(elements)
                 .into_any_element()
         }

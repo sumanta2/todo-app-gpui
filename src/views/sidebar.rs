@@ -208,7 +208,7 @@ impl NotesApp {
                                                                         ActiveField::NoteHeading;
                                                                     this.focus_handle.focus(window, cx);
                                                                     let rel_x = (event.position.x.as_f32() - 16.0).max(0.0);
-                                                                    let click_idx = calculate_line_text_offset(rel_x, &this.edit_note_heading);
+                                                                    let click_idx = calculate_line_text_offset(rel_x, &this.edit_note_heading, 13.0);
                                                                     this.edit_note_heading_cursor = click_idx;
                                                                     this.edit_note_heading_anchor = Some(click_idx);
                                                                     this.is_selecting_note_heading = true;
@@ -219,7 +219,7 @@ impl NotesApp {
                                                             .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
                                                                 if this.is_selecting_note_heading {
                                                                     let rel_x = (event.position.x.as_f32() - 16.0).max(0.0);
-                                                                    let drag_idx = calculate_line_text_offset(rel_x, &this.edit_note_heading);
+                                                                    let drag_idx = calculate_line_text_offset(rel_x, &this.edit_note_heading, 13.0);
                                                                     this.edit_note_heading_cursor = drag_idx;
                                                                     cx.notify();
                                                                     cx.stop_propagation();

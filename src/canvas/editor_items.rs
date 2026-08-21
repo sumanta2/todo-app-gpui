@@ -130,174 +130,12 @@ impl NotesApp {
 
                     // Text Editor content or static presentation
                     if is_active {
-                        let body_text = self.edit_body.clone();
-                        let cursor_idx = self.edit_body_cursor;
-                        let anchor_idx = self.edit_body_anchor;
-
-                        let build_body_content = {
-                            if body_text.is_empty() {
-                                div()
-                                    .flex()
-                                    .items_center()
-                                    .child(div().text_color(rgb(0x606060)).child("Type note..."))
-                                    .child(if is_body_focused {
-                                        div()
-                                            .w(px(2.0))
-                                            .h(px(16.0))
-                                            .bg(rgb(0x0078d4))
-                                            .flex_shrink_0()
-                                    } else {
-                                        div()
-                                    })
-                            } else {
-                                let sel_start =
-                                    anchor_idx.map(|a| a.min(cursor_idx)).unwrap_or(cursor_idx);
-                                let sel_end =
-                                    anchor_idx.map(|a| a.max(cursor_idx)).unwrap_or(cursor_idx);
-                                let has_sel = sel_start < sel_end;
-
-                                let mut line_rows: Vec<AnyElement> = Vec::new();
-                                let logical_lines: Vec<&str> = body_text.split('\n').collect();
-                                let mut global_offset = 0;
-                                for (line_idx, line) in logical_lines.iter().enumerate() {
-                                    let line_len = line.chars().count();
-                                    let is_last_logical_line = line_idx == logical_lines.len() - 1;
-                                    let line_global_start = global_offset;
-                                    let line_global_end = global_offset + line_len;
-
-                                    let mut row = div()
-                                        .flex()
-                                        .flex_row()
-                                        .items_center()
-                                        .min_h(px(20.0));
-
-                                    if is_body_focused && !has_sel {
-                                        let is_cursor_in_line = if is_last_logical_line {
-                                            cursor_idx >= line_global_start
-                                                && cursor_idx <= line_global_end
-                                        } else {
-                                            cursor_idx >= line_global_start
-                                                && cursor_idx <= line_global_end
-                                        };
-
-                                        if is_cursor_in_line {
-                                            let local_cursor = cursor_idx
-                                                .saturating_sub(line_global_start)
-                                                .min(line_len);
-                                            let line_chars: Vec<char> = line.chars().collect();
-                                            let before_str: String =
-                                                line_chars[..local_cursor].iter().collect();
-                                            let after_str: String =
-                                                line_chars[local_cursor..].iter().collect();
-
-                                            if !before_str.is_empty() {
-                                                row = row.child(
-                                                    div()
-                                                        .text_color(rgb(0xd4d4d4))
-                                                        .child(before_str.replace(' ', "\u{00A0}")),
-                                                );
-                                            }
-                                            row = row.child(
-                                                div()
-                                                    .w(px(2.0))
-                                                    .h(px(16.0))
-                                                    .bg(rgb(0x0078d4))
-                                                    .flex_shrink_0(),
-                                            );
-                                            if !after_str.is_empty() {
-                                                row = row.child(
-                                                    div()
-                                                        .text_color(rgb(0xd4d4d4))
-                                                        .child(after_str.replace(' ', "\u{00A0}")),
-                                                );
-                                            }
-                                        } else {
-                                            if !line.is_empty() {
-                                                row = row.child(
-                                                    div()
-                                                        .text_color(rgb(0xd4d4d4))
-                                                        .child(line.replace(' ', "\u{00A0}")),
-                                                );
-                                            }
-                                        }
-                                    } else if has_sel {
-                                        let sel_overlap_start = sel_start.max(line_global_start);
-                                        let sel_overlap_end = sel_end.min(line_global_end);
-
-                                        if sel_overlap_start < sel_overlap_end {
-                                            let line_chars: Vec<char> = line.chars().collect();
-                                            let loc_start = sel_overlap_start
-                                                .saturating_sub(line_global_start)
-                                                .min(line_chars.len());
-                                            let loc_end = sel_overlap_end
-                                                .saturating_sub(line_global_start)
-                                                .min(line_chars.len());
-
-                                            let before_str: String =
-                                                line_chars[..loc_start].iter().collect();
-                                            let sel_str: String =
-                                                line_chars[loc_start..loc_end].iter().collect();
-                                            let after_str: String =
-                                                line_chars[loc_end..].iter().collect();
-
-                                            if !before_str.is_empty() {
-                                                row = row.child(
-                                                    div()
-                                                        .flex_shrink_0()
-                                                        .text_color(rgb(0xd4d4d4))
-                                                        .child(before_str.replace(' ', "\u{00A0}")),
-                                                );
-                                            }                                             if !sel_str.is_empty() {
-                                                row = row.child(
-                                                    div()
-                                                        .flex_shrink_0()
-                                                        .text_color(rgb(0xffffff))
-                                                        .bg(rgb(0x0078d4))
-                                                        .rounded(px(2.0))
-                                                        .child(sel_str.replace(' ', "\u{00A0}")),
-                                                );
-                                            }
-                                            if !after_str.is_empty() {
-                                                row = row.child(
-                                                    div()
-                                                        .flex_shrink_0()
-                                                        .text_color(rgb(0xd4d4d4))
-                                                        .child(after_str.replace(' ', "\u{00A0}")),
-                                                );
-                                            }
-                                        } else {
-                                            if line.is_empty() && sel_start <= line_global_start && sel_end > line_global_start {
-                                                row = row.child(
-                                                    div()
-                                                        .w(px(6.0))
-                                                        .h(px(14.0))
-                                                        .bg(rgb(0x0078d4))
-                                                        .rounded(px(2.0)),
-                                                );
-                                            } else if !line.is_empty() {
-                                                row = row.child(
-                                                    div()
-                                                        .text_color(rgb(0xd4d4d4))
-                                                        .child(line.replace(' ', "\u{00A0}")),
-                                                );
-                                            }
-                                        }
-                                    } else {
-                                        if !line.is_empty() {
-                                            row = row.child(
-                                                div()
-                                                    .text_color(rgb(0xd4d4d4))
-                                                    .child(line.replace(' ', "\u{00A0}")),
-                                            );
-                                        }
-                                    }
-
-                                    line_rows.push(row.into_any_element());
-                                    global_offset += line_len + 1;
-                                }
-
-                                div().flex().flex_col().children(line_rows)
-                            }
+                        let text_editor = crate::canvas::text_editor::TextEditor {
+                            text: self.edit_body.clone(),
+                            cursor: self.edit_body_cursor,
+                            anchor: self.edit_body_anchor,
+                            focus_handle: self.focus_handle.clone(),
+                            is_selecting: self.is_selecting_body,
                         };
 
                         let t_id_for_down_left = t_id_clone.clone();
@@ -309,6 +147,7 @@ impl NotesApp {
                                 .id(("text-content", id_num))
                                 .p(px(5.0))
                                 .text_size(px(12.0))
+                                .cursor_text()
                                 .on_mouse_down(
                                     MouseButton::Left,
                                     cx.listener(
@@ -321,7 +160,7 @@ impl NotesApp {
                                             this.active_text_block_id =
                                                 Some(t_id_for_down_left.clone());
                                             this.active_field = ActiveField::Body;
-                                            if let Some(CanvasItem::Text(tx)) = this
+                                            let (item_x, item_y) = if let Some(CanvasItem::Text(tx)) = this
                                                 .edit_canvas_items
                                                 .iter()
                                                 .find(|item| match item {
@@ -332,14 +171,17 @@ impl NotesApp {
                                                 })
                                             {
                                                 this.edit_body = tx.text.clone();
-                                            }
+                                                (tx.x, tx.y)
+                                            } else {
+                                                t_pos
+                                            };
                                             let click_idx = calculate_canvas_text_offset(
                                                 event.position,
                                                 this.is_sidebar_open,
                                                 this.pan_x,
                                                 this.pan_y,
-                                                t_pos.0,
-                                                t_pos.1,
+                                                item_x,
+                                                item_y,
                                                 this.canvas_top_y,
                                                 &this.edit_body,
                                                 textbox_width,
@@ -364,7 +206,7 @@ impl NotesApp {
                                             this.active_text_block_id =
                                                 Some(t_id_for_down_right.clone());
                                             this.active_field = ActiveField::Body;
-                                            if let Some(CanvasItem::Text(tx)) = this
+                                            let (item_x, item_y) = if let Some(CanvasItem::Text(tx)) = this
                                                 .edit_canvas_items
                                                 .iter()
                                                 .find(|item| match item {
@@ -375,14 +217,17 @@ impl NotesApp {
                                                 })
                                             {
                                                 this.edit_body = tx.text.clone();
-                                            }
+                                                (tx.x, tx.y)
+                                            } else {
+                                                t_pos
+                                            };
                                             let click_idx = calculate_canvas_text_offset(
                                                 event.position,
                                                 this.is_sidebar_open,
                                                 this.pan_x,
                                                 this.pan_y,
-                                                t_pos.0,
-                                                t_pos.1,
+                                                item_x,
+                                                item_y,
                                                 this.canvas_top_y,
                                                 &this.edit_body,
                                                 textbox_width,
@@ -398,6 +243,18 @@ impl NotesApp {
                                 .on_mouse_move(cx.listener(
                                     move |this, event: &gpui::MouseMoveEvent, _, cx| {
                                         if this.is_selecting_body {
+                                            let (item_x, item_y, item_w) = if let Some(ref active_id) = this.active_text_block_id {
+                                                if let Some(CanvasItem::Text(tx)) = this.edit_canvas_items.iter().find(|i| match i {
+                                                    CanvasItem::Text(t) => t.id == *active_id,
+                                                    _ => false,
+                                                }) {
+                                                    (tx.x, tx.y, tx.width.unwrap_or(250.0))
+                                                } else {
+                                                    (t_pos_move.0, t_pos_move.1, textbox_width)
+                                                }
+                                            } else {
+                                                (t_pos_move.0, t_pos_move.1, textbox_width)
+                                            };
                                             let anchor = this
                                                 .edit_body_anchor
                                                 .unwrap_or(this.edit_body_cursor);
@@ -406,12 +263,12 @@ impl NotesApp {
                                                 this.is_sidebar_open,
                                                 this.pan_x,
                                                 this.pan_y,
-                                                t_pos_move.0,
-                                                t_pos_move.1,
+                                                item_x,
+                                                item_y,
                                                 this.canvas_top_y,
                                                 &this.edit_body,
                                                 anchor,
-                                                textbox_width,
+                                                item_w,
                                             );
                                             this.edit_body_cursor = drag_idx;
                                             cx.notify();
@@ -447,7 +304,7 @@ impl NotesApp {
                                         }
                                     }),
                                 )
-                                .child(div().w(px(textbox_width - 16.0)).child(build_body_content)),
+                                .child(div().w(px(textbox_width - 16.0)).child(text_editor.render_editor(is_body_focused))),
                         );
                     } else {
                         let t_id_for_inactive_left = t_id_clone.clone();
@@ -459,6 +316,7 @@ impl NotesApp {
                                 .id(("text-content", id_num))
                                 .p(px(5.0))
                                 .text_size(px(12.0))
+                                .cursor_text()
                                 .on_mouse_down(
                                     MouseButton::Left,
                                     cx.listener(
@@ -471,7 +329,7 @@ impl NotesApp {
                                             this.active_text_block_id =
                                                 Some(t_id_for_inactive_left.clone());
                                             this.active_field = ActiveField::Body;
-                                            if let Some(CanvasItem::Text(tx)) = this
+                                            let (item_x, item_y) = if let Some(CanvasItem::Text(tx)) = this
                                                 .edit_canvas_items
                                                 .iter()
                                                 .find(|item| match item {
@@ -482,14 +340,17 @@ impl NotesApp {
                                                 })
                                             {
                                                 this.edit_body = tx.text.clone();
-                                            }
+                                                (tx.x, tx.y)
+                                            } else {
+                                                t_pos
+                                            };
                                             let click_idx = calculate_canvas_text_offset(
                                                 event.position,
                                                 this.is_sidebar_open,
                                                 this.pan_x,
                                                 this.pan_y,
-                                                t_pos.0,
-                                                t_pos.1,
+                                                item_x,
+                                                item_y,
                                                 this.canvas_top_y,
                                                 &this.edit_body,
                                                 textbox_width,
@@ -514,7 +375,7 @@ impl NotesApp {
                                             this.active_text_block_id =
                                                 Some(t_id_for_inactive_right.clone());
                                             this.active_field = ActiveField::Body;
-                                            if let Some(CanvasItem::Text(tx)) = this
+                                            let (item_x, item_y) = if let Some(CanvasItem::Text(tx)) = this
                                                 .edit_canvas_items
                                                 .iter()
                                                 .find(|item| match item {
@@ -525,14 +386,17 @@ impl NotesApp {
                                                 })
                                             {
                                                 this.edit_body = tx.text.clone();
-                                            }
+                                                (tx.x, tx.y)
+                                            } else {
+                                                t_pos
+                                            };
                                             let click_idx = calculate_canvas_text_offset(
                                                 event.position,
                                                 this.is_sidebar_open,
                                                 this.pan_x,
                                                 this.pan_y,
-                                                t_pos.0,
-                                                t_pos.1,
+                                                item_x,
+                                                item_y,
                                                 this.canvas_top_y,
                                                 &this.edit_body,
                                                 textbox_width,
@@ -548,6 +412,18 @@ impl NotesApp {
                                 .on_mouse_move(cx.listener(
                                     move |this, event: &gpui::MouseMoveEvent, _, cx| {
                                         if this.is_selecting_body {
+                                            let (item_x, item_y, item_w) = if let Some(ref active_id) = this.active_text_block_id {
+                                                if let Some(CanvasItem::Text(tx)) = this.edit_canvas_items.iter().find(|i| match i {
+                                                    CanvasItem::Text(t) => t.id == *active_id,
+                                                    _ => false,
+                                                }) {
+                                                    (tx.x, tx.y, tx.width.unwrap_or(250.0))
+                                                } else {
+                                                    (t_pos_move.0, t_pos_move.1, textbox_width)
+                                                }
+                                            } else {
+                                                (t_pos_move.0, t_pos_move.1, textbox_width)
+                                            };
                                             let anchor = this
                                                 .edit_body_anchor
                                                 .unwrap_or(this.edit_body_cursor);
@@ -556,12 +432,12 @@ impl NotesApp {
                                                 this.is_sidebar_open,
                                                 this.pan_x,
                                                 this.pan_y,
-                                                t_pos_move.0,
-                                                t_pos_move.1,
+                                                item_x,
+                                                item_y,
                                                 this.canvas_top_y,
                                                 &this.edit_body,
                                                 anchor,
-                                                textbox_width,
+                                                item_w,
                                             );
                                             this.edit_body_cursor = drag_idx;
                                             cx.notify();

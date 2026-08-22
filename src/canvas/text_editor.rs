@@ -278,11 +278,15 @@ impl TextEditor {
 
         if text.is_empty() {
             return div()
+                .relative()
                 .flex()
                 .items_center()
                 .min_h(px(20.0))
                 .child(if is_focused {
                     div()
+                        .absolute()
+                        .left(px(0.0))
+                        .top(px(2.0))
                         .w(px(2.0))
                         .h(px(16.0))
                         .bg(if self.cursor_visible {
@@ -290,8 +294,6 @@ impl TextEditor {
                         } else {
                             rgba(0x00000000)
                         })
-                        .flex_shrink_0()
-                        .mr(px(-2.0))
                 } else {
                     div()
                 })
@@ -310,6 +312,7 @@ impl TextEditor {
             let line_end = global_offset + line_len;
 
             let mut row = div()
+                .relative()
                 .flex()
                 .flex_row()
                 .items_center()
@@ -333,95 +336,106 @@ impl TextEditor {
                         let loc_start = sel_overlap_start.saturating_sub(line_start).min(line_chars.len());
                         let loc_end = sel_overlap_end.saturating_sub(line_start).min(line_chars.len());
 
-                        let before_str: String = line_chars[..loc_start].iter().collect();
-                        let sel_str: String = line_chars[loc_start..loc_end].iter().collect();
-                        let after_str: String = line_chars[loc_end..].iter().collect();
+                        let before_prefix: String = line_chars[..loc_start].iter().collect();
+                        let sel_content: String = line_chars[loc_start..loc_end].iter().collect();
 
-                        if !before_str.is_empty() {
-                            row = row.child(
-                                div()
-                                    .flex_shrink_0()
-                                    .text_color(rgb(0xd4d4d4))
-                                    .child(before_str.replace(' ', "\u{00A0}")),
-                            );
-                        }
-                        if !sel_str.is_empty() {
-                            row = row.child(
-                                div()
-                                    .flex_shrink_0()
-                                    .text_color(rgb(0xffffff))
-                                    .bg(rgb(0x0078d4))
-                                    .rounded(px(2.0))
-                                    .child(sel_str.replace(' ', "\u{00A0}")),
-                            );
-                        }
-                        if !after_str.is_empty() {
-                            row = row.child(
-                                div()
-                                    .flex_shrink_0()
-                                    .text_color(rgb(0xd4d4d4))
-                                    .child(after_str.replace(' ', "\u{00A0}")),
-                            );
-                        }
+                        let before_disp = before_prefix.replace(' ', "\u{00A0}");
+                        let sel_disp = sel_content.replace(' ', "\u{00A0}");
+
+                        row = row.child(
+                            div()
+                                .absolute()
+                                .left(px(0.0))
+                                .top(px(1.0))
+                                .flex()
+                                .flex_row()
+                                .items_center()
+                                .child(
+                                    div()
+                                        .text_color(rgba(0x00000000))
+                                        .child(before_disp),
+                                )
+                                .child(
+                                    div()
+                                        .bg(rgb(0x0078d4))
+                                        .rounded(px(2.0))
+                                        .h(px(18.0))
+                                        .flex()
+                                        .items_center()
+                                        .child(
+                                            div()
+                                                .text_color(rgba(0x00000000))
+                                                .child(sel_disp),
+                                        ),
+                                ),
+                        );
                     } else if line_len == 0 && sel.start <= line_start && sel.end > line_start {
                         row = row.child(
                             div()
+                                .absolute()
+                                .left(px(0.0))
+                                .top(px(1.0))
                                 .w(px(6.0))
-                                .h(px(14.0))
+                                .h(px(18.0))
                                 .bg(rgb(0x0078d4))
                                 .rounded(px(2.0)),
                         );
                     }
                 }
+            }
+
+            // Always render full line text as a single contiguous, solid text element
+            let line_display = if line.is_empty() {
+                "\u{00A0}".to_string()
             } else {
-                // Render line with caret if line contains cursor and focused
-                let is_cursor_in_line = if is_last_line {
-                    cursor_idx >= line_start && cursor_idx <= line_end
-                } else {
-                    cursor_idx >= line_start && cursor_idx <= line_end
-                };
+                line.replace(' ', "\u{00A0}")
+            };
 
-                if is_focused && is_cursor_in_line && selection_range.is_none() {
-                    let local_cursor = cursor_idx.saturating_sub(line_start).min(line_len);
-                    let line_chars: Vec<char> = line.chars().collect();
-                    let before_str: String = line_chars[..local_cursor].iter().collect();
-                    let after_str: String = line_chars[local_cursor..].iter().collect();
+            row = row.child(
+                div()
+                    .text_color(rgb(0xd4d4d4))
+                    .child(line_display),
+            );
 
-                    if !before_str.is_empty() {
-                        row = row.child(
+            // If focused and cursor is in this line, render cursor overlay
+            let is_cursor_in_line = if is_last_line {
+                cursor_idx >= line_start && cursor_idx <= line_end
+            } else {
+                cursor_idx >= line_start && cursor_idx <= line_end
+            };
+
+            if is_focused && is_cursor_in_line && selection_range.is_none() {
+                let local_cursor = cursor_idx.saturating_sub(line_start).min(line_len);
+                let line_chars: Vec<char> = line.chars().collect();
+                let before_prefix: String = line_chars[..local_cursor].iter().collect();
+                let before_disp = before_prefix.replace(' ', "\u{00A0}");
+
+                row = row.child(
+                    div()
+                        .absolute()
+                        .left(px(0.0))
+                        .top(px(2.0))
+                        .flex()
+                        .flex_row()
+                        .items_center()
+                        .child(
                             div()
-                                .text_color(rgb(0xd4d4d4))
-                                .child(before_str.replace(' ', "\u{00A0}")),
-                        );
-                    }
-                    row = row.child(
-                        div()
-                            .w(px(2.0))
-                            .h(px(16.0))
-                            .bg(if self.cursor_visible {
-                                rgb(0x0078d4)
-                            } else {
-                                rgba(0x00000000)
-                            })
-                            .flex_shrink_0()
-                            .mr(px(-2.0)),
-                    );
-                    if !after_str.is_empty() {
-                        row = row.child(
+                                .text_color(rgba(0x00000000))
+                                .child(before_disp),
+                        )
+                        .child(
                             div()
-                                .text_color(rgb(0xd4d4d4))
-                                .child(after_str.replace(' ', "\u{00A0}")),
-                        );
-                    }
-                } else {
-                    if !line.is_empty() {
-                        row = row.child(
-                            div()
-                                .text_color(rgb(0xd4d4d4))
-                                .child(line.replace(' ', "\u{00A0}")),
-                        );
-                    }
-                }
+                                .w(px(2.0))
+                                .h(px(16.0))
+                                .bg(if self.cursor_visible {
+                                    rgb(0x0078d4)
+                                } else {
+                                    rgba(0x00000000)
+                                })
+                                .flex_shrink_0()
+                                .ml(px(-1.0)),
+                        ),
+                );
             }
 
             line_rows.push(row.into_any_element());

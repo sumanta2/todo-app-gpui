@@ -127,6 +127,7 @@ impl NotesApp {
                                                     let editor = if self.edit_note_heading.is_empty() {
                                                         div()
                                                             .id("note-heading-placeholder")
+                                                            .relative()
                                                             .flex()
                                                             .items_center()
                                                             .on_mouse_down(
@@ -143,8 +144,16 @@ impl NotesApp {
                                                                     cx.stop_propagation();
                                                                 }),
                                                             )
+                                                            .child(
+                                                                div()
+                                                                    .text_color(rgb(0x808080))
+                                                                    .child("Notebook Name..."),
+                                                            )
                                                             .child(if is_focused {
                                                                 div()
+                                                                    .absolute()
+                                                                    .left(px(0.0))
+                                                                    .top(px(2.0))
                                                                     .w(px(1.5))
                                                                     .h(px(14.0))
                                                                     .bg(if self.cursor_visible {
@@ -152,16 +161,9 @@ impl NotesApp {
                                                                     } else {
                                                                         rgba(0x00000000)
                                                                     })
-                                                                    .flex_shrink_0()
-                                                                    .mr(px(-1.5))
                                                             } else {
                                                                 div()
                                                             })
-                                                            .child(
-                                                                div()
-                                                                    .text_color(rgb(0x808080))
-                                                                    .child("Notebook Name..."),
-                                                            )
                                                     } else {
                                                         let (sel_start, sel_end) = get_selection_range(
                                                             self.edit_note_heading_cursor,
@@ -172,51 +174,83 @@ impl NotesApp {
                                                         let text = &self.edit_note_heading;
                                                         let chars: Vec<char> = text.chars().collect();
 
-                                                        let before: String = chars[..sel_start.min(chars.len())].iter().collect();
-                                                        let selected: String = chars[sel_start.min(chars.len())..sel_end.min(chars.len())].iter().collect();
-                                                        let after: String = chars[sel_end.min(chars.len())..].iter().collect();
-
                                                         let mut els: Vec<AnyElement> = Vec::new();
+                                                        if has_selection {
+                                                            let prefix: String = chars[..sel_start.min(chars.len())].iter().collect();
+                                                            let sel_chunk: String = chars[sel_start.min(chars.len())..sel_end.min(chars.len())].iter().collect();
+                                                            let before_disp = prefix.replace(' ', "\u{00A0}");
+                                                            let sel_disp = sel_chunk.replace(' ', "\u{00A0}");
+                                                            els.push(
+                                                                div()
+                                                                    .absolute()
+                                                                    .left(px(0.0))
+                                                                    .top(px(1.0))
+                                                                    .flex()
+                                                                    .flex_row()
+                                                                    .items_center()
+                                                                    .child(
+                                                                        div()
+                                                                            .text_color(rgba(0x00000000))
+                                                                            .child(before_disp),
+                                                                    )
+                                                                    .child(
+                                                                        div()
+                                                                            .bg(rgb(0x264f78))
+                                                                            .rounded(px(2.0))
+                                                                            .h(px(16.0))
+                                                                            .flex()
+                                                                            .items_center()
+                                                                            .child(
+                                                                                div()
+                                                                                    .text_color(rgba(0x00000000))
+                                                                                    .child(sel_disp),
+                                                                            ),
+                                                                    )
+                                                                    .into_any_element(),
+                                                            );
+                                                        }
+
+                                                        els.push(
+                                                            div()
+                                                                .child(if text.is_empty() { "\u{00A0}".to_string() } else { text.replace(' ', "\u{00A0}") })
+                                                                .into_any_element(),
+                                                        );
+
                                                         if is_focused && !has_selection {
-                                                            if !before.is_empty() {
-                                                                els.push(div().child(before).into_any_element());
-                                                            }
+                                                            let prefix: String = chars[..self.edit_note_heading_cursor.min(chars.len())].iter().collect();
+                                                            let before_disp = prefix.replace(' ', "\u{00A0}");
                                                             els.push(
                                                                 div()
-                                                                    .w(px(1.5))
-                                                                    .h(px(14.0))
-                                                                    .bg(if self.cursor_visible {
-                                                                        rgb(0x0078d4)
-                                                                    } else {
-                                                                        rgba(0x00000000)
-                                                                    })
-                                                                    .flex_shrink_0()
-                                                                    .mr(px(-1.5))
+                                                                    .absolute()
+                                                                    .left(px(0.0))
+                                                                    .top(px(2.0))
+                                                                    .flex()
+                                                                    .flex_row()
+                                                                    .items_center()
+                                                                    .child(
+                                                                        div()
+                                                                            .text_color(rgba(0x00000000))
+                                                                            .child(before_disp),
+                                                                    )
+                                                                    .child(
+                                                                        div()
+                                                                            .w(px(1.5))
+                                                                            .h(px(14.0))
+                                                                            .bg(if self.cursor_visible {
+                                                                                rgb(0x0078d4)
+                                                                            } else {
+                                                                                rgba(0x00000000)
+                                                                            })
+                                                                            .flex_shrink_0()
+                                                                            .ml(px(-1.0)),
+                                                                    )
                                                                     .into_any_element(),
                                                             );
-                                                            if !after.is_empty() {
-                                                                els.push(div().child(after).into_any_element());
-                                                            }
-                                                        } else if has_selection {
-                                                            if !before.is_empty() {
-                                                                els.push(div().child(before).into_any_element());
-                                                            }
-                                                            els.push(
-                                                                div()
-                                                                    .bg(rgb(0x264f78))
-                                                                    .text_color(rgb(0xffffff))
-                                                                    .child(selected)
-                                                                    .into_any_element(),
-                                                            );
-                                                            if !after.is_empty() {
-                                                                els.push(div().child(after).into_any_element());
-                                                            }
-                                                        } else {
-                                                            els.push(div().child(text.clone()).into_any_element());
                                                         }
 
                                                         div()
                                                             .id("note-heading-editor")
+                                                            .relative()
                                                             .flex()
                                                             .items_center()
                                                             .on_mouse_down(

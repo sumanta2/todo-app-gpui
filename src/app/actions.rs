@@ -58,7 +58,29 @@ impl NotesApp {
             viewer_text_anchor: None,
             is_selecting_viewer_text: false,
             window_w: 800.0,
+            cursor_visible: true,
         };
+
+        cx.spawn(|this: gpui::WeakEntity<Self>, cx: &mut gpui::AsyncApp| {
+            let mut cx = cx.clone();
+            async move {
+                loop {
+                    cx.background_executor()
+                        .timer(std::time::Duration::from_millis(500))
+                        .await;
+                    if this
+                        .update(&mut cx, |this, cx| {
+                            this.cursor_visible = !this.cursor_visible;
+                            cx.notify();
+                        })
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            }
+        })
+        .detach();
 
         app.initialize_active_section_page();
         app

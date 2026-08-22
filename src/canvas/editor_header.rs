@@ -1,16 +1,15 @@
-use gpui::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButton};
+use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, MouseButton};
 
 use crate::app::NotesApp;
 use crate::helpers::{calculate_line_text_offset, hash_str};
 use crate::models::{ActiveField, NoteContent};
 
 impl NotesApp {
-    pub(crate) fn build_section_name_editor(
+    fn build_section_name_editor(
         &self,
-        is_section_name_focused: bool,
+        is_focused: bool,
         cx: &mut Context<Self>,
-    ) -> impl IntoElement {
-        let is_focused = is_section_name_focused;
+    ) -> AnyElement {
         let text_div = |t: String| {
             div()
                 .text_size(px(11.0))
@@ -40,6 +39,7 @@ impl NotesApp {
                         this.edit_section_name_cursor = 0;
                         this.edit_section_name_anchor = None;
                         this.is_selecting_section_name = false;
+                        this.cursor_visible = true;
                         cx.notify();
                         cx.stop_propagation();
                     }),
@@ -52,10 +52,20 @@ impl NotesApp {
                         .child("Section Name..."),
                 )
                 .child(if is_focused {
-                    div().w(px(1.0)).h(px(12.0)).bg(rgb(0x0078d4))
+                    div()
+                        .w(px(1.5))
+                        .h(px(12.0))
+                        .bg(if self.cursor_visible {
+                            rgb(0x0078d4)
+                        } else {
+                            rgba(0x00000000)
+                        })
+                        .flex_shrink_0()
+                        .mr(px(-1.5))
                 } else {
                     div()
                 })
+                .into_any_element()
         } else {
             let sel_start = self
                 .edit_section_name_anchor
@@ -79,10 +89,15 @@ impl NotesApp {
                 els.push(text_div(before.clone()).into_any_element());
                 els.push(
                     div()
-                        .w(px(1.0))
+                        .w(px(1.5))
                         .h(px(12.0))
-                        .bg(rgb(0x0078d4))
+                        .bg(if self.cursor_visible {
+                            rgb(0x0078d4)
+                        } else {
+                            rgba(0x00000000)
+                        })
                         .flex_shrink_0()
+                        .mr(px(-1.5))
                         .into_any_element(),
                 );
                 els.push(text_div(after.clone()).into_any_element());
@@ -110,6 +125,7 @@ impl NotesApp {
                         this.edit_section_name_cursor = click_idx;
                         this.edit_section_name_anchor = Some(click_idx);
                         this.is_selecting_section_name = true;
+                        this.cursor_visible = true;
                         cx.notify();
                         cx.stop_propagation();
                     }),
@@ -140,6 +156,7 @@ impl NotesApp {
                     }),
                 )
                 .children(els)
+                .into_any_element()
         }
     }
 
@@ -293,21 +310,31 @@ impl NotesApp {
                         this.edit_heading_cursor = 0;
                         this.edit_heading_anchor = None;
                         this.is_selecting_heading = false;
+                        this.cursor_visible = true;
                         cx.notify();
                         cx.stop_propagation();
                     }),
                 )
+                .child(if is_heading_focused {
+                    div()
+                        .w(px(2.0))
+                        .h(px(20.0))
+                        .bg(if self.cursor_visible {
+                            rgb(0x0078d4)
+                        } else {
+                            rgba(0x00000000)
+                        })
+                        .flex_shrink_0()
+                        .mr(px(-2.0))
+                } else {
+                    div()
+                })
                 .child(
                     div()
                         .text_size(px(20.0))
                         .text_color(rgb(0x808080))
                         .child("Heading..."),
                 )
-                .child(if is_heading_focused {
-                    div().w(px(1.0)).h(px(20.0)).bg(rgb(0x0078d4))
-                } else {
-                    div()
-                })
                 .into_any_element()
         } else {
             let sel_start = self
@@ -329,36 +356,47 @@ impl NotesApp {
 
             let mut elements: Vec<AnyElement> = Vec::new();
             if is_heading_focused && cursor == sel_start && !has_selection {
+                if !before.is_empty() {
+                    elements.push(
+                        div()
+                            .text_size(px(20.0))
+                            .text_color(rgb(0xffffff))
+                            .child(before.clone())
+                            .into_any_element(),
+                    );
+                }
                 elements.push(
                     div()
-                        .text_size(px(20.0))
-                        .text_color(rgb(0xffffff))
-                        .child(before.clone())
-                        .into_any_element(),
-                );
-                elements.push(
-                    div()
-                        .w(px(1.0))
+                        .w(px(2.0))
                         .h(px(20.0))
-                        .bg(rgb(0x0078d4))
+                        .bg(if self.cursor_visible {
+                            rgb(0x0078d4)
+                        } else {
+                            rgba(0x00000000)
+                        })
                         .flex_shrink_0()
+                        .mr(px(-2.0))
                         .into_any_element(),
                 );
-                elements.push(
-                    div()
-                        .text_size(px(20.0))
-                        .text_color(rgb(0xffffff))
-                        .child(after.clone())
-                        .into_any_element(),
-                );
+                if !after.is_empty() {
+                    elements.push(
+                        div()
+                            .text_size(px(20.0))
+                            .text_color(rgb(0xffffff))
+                            .child(after.clone())
+                            .into_any_element(),
+                    );
+                }
             } else if has_selection {
-                elements.push(
-                    div()
-                        .text_size(px(20.0))
-                        .text_color(rgb(0xffffff))
-                        .child(before.clone())
-                        .into_any_element(),
-                );
+                if !before.is_empty() {
+                    elements.push(
+                        div()
+                            .text_size(px(20.0))
+                            .text_color(rgb(0xffffff))
+                            .child(before.clone())
+                            .into_any_element(),
+                    );
+                }
                 elements.push(
                     div()
                         .text_size(px(20.0))
@@ -367,13 +405,15 @@ impl NotesApp {
                         .child(selected.clone())
                         .into_any_element(),
                 );
-                elements.push(
-                    div()
-                        .text_size(px(20.0))
-                        .text_color(rgb(0xffffff))
-                        .child(after.clone())
-                        .into_any_element(),
-                );
+                if !after.is_empty() {
+                    elements.push(
+                        div()
+                            .text_size(px(20.0))
+                            .text_color(rgb(0xffffff))
+                            .child(after.clone())
+                            .into_any_element(),
+                    );
+                }
             } else {
                 elements.push(
                     div()
@@ -399,6 +439,7 @@ impl NotesApp {
                         this.edit_heading_cursor = click_idx;
                         this.edit_heading_anchor = Some(click_idx);
                         this.is_selecting_heading = true;
+                        this.cursor_visible = true;
                         cx.notify();
                         cx.stop_propagation();
                     }),

@@ -136,6 +136,7 @@ impl NotesApp {
                             anchor: self.edit_body_anchor,
                             focus_handle: self.focus_handle.clone(),
                             is_selecting: self.is_selecting_body,
+                            cursor_visible: self.cursor_visible,
                         };
 
                         let t_id_for_down_left = t_id_clone.clone();
@@ -189,6 +190,7 @@ impl NotesApp {
                                             this.edit_body_cursor = click_idx;
                                             this.edit_body_anchor = Some(click_idx);
                                             this.is_selecting_body = true;
+                                            this.cursor_visible = true;
                                             cx.notify();
                                             cx.stop_propagation();
                                         },
@@ -235,6 +237,7 @@ impl NotesApp {
                                             this.edit_body_cursor = click_idx;
                                             this.edit_body_anchor = Some(click_idx);
                                             this.is_selecting_body = true;
+                                            this.cursor_visible = true;
                                             cx.notify();
                                             cx.stop_propagation();
                                         },
@@ -358,6 +361,7 @@ impl NotesApp {
                                             this.edit_body_cursor = click_idx;
                                             this.edit_body_anchor = Some(click_idx);
                                             this.is_selecting_body = true;
+                                            this.cursor_visible = true;
                                             cx.notify();
                                             cx.stop_propagation();
                                         },
@@ -404,6 +408,7 @@ impl NotesApp {
                                             this.edit_body_cursor = click_idx;
                                             this.edit_body_anchor = Some(click_idx);
                                             this.is_selecting_body = true;
+                                            this.cursor_visible = true;
                                             cx.notify();
                                             cx.stop_propagation();
                                         },

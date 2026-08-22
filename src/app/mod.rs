@@ -76,6 +76,9 @@ pub struct NotesApp {
 
     // Window dimensions for canvas boundaries
     pub(crate) window_w: f32,
+
+    // Cursor Blink State
+    pub(crate) cursor_visible: bool,
 }
 
 impl Focusable for NotesApp {

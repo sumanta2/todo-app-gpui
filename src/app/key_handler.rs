@@ -9,6 +9,7 @@ use crate::models::{load_canvas_items, load_note_content, ActiveField, CanvasIte
 
 impl NotesApp {
     pub(crate) fn handle_key(&mut self, event: &gpui::KeyDownEvent, cx: &mut Context<Self>) {
+        self.cursor_visible = true;
         let key = event.keystroke.key.as_str();
         let control = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
         let shift = event.keystroke.modifiers.shift;

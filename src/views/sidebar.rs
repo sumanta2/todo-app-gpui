@@ -1,4 +1,4 @@
-use gpui::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButton, Window};
+use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, MouseButton, Window};
 
 use crate::app::NotesApp;
 use crate::helpers::{calculate_line_text_offset, get_selection_range};
@@ -138,63 +138,81 @@ impl NotesApp {
                                                                     this.edit_note_heading_cursor = 0;
                                                                     this.edit_note_heading_anchor =
                                                                         None;
+                                                                    this.cursor_visible = true;
                                                                     cx.notify();
                                                                     cx.stop_propagation();
                                                                 }),
                                                             )
+                                                            .child(if is_focused {
+                                                                div()
+                                                                    .w(px(1.5))
+                                                                    .h(px(14.0))
+                                                                    .bg(if self.cursor_visible {
+                                                                        rgb(0x0078d4)
+                                                                    } else {
+                                                                        rgba(0x00000000)
+                                                                    })
+                                                                    .flex_shrink_0()
+                                                                    .mr(px(-1.5))
+                                                            } else {
+                                                                div()
+                                                            })
                                                             .child(
                                                                 div()
                                                                     .text_color(rgb(0x808080))
                                                                     .child("Notebook Name..."),
                                                             )
                                                     } else {
-                                                        let mut els: Vec<AnyElement> = Vec::new();
-                                                        let char_count =
-                                                            self.edit_note_heading.chars().count();
                                                         let (sel_start, sel_end) = get_selection_range(
                                                             self.edit_note_heading_cursor,
                                                             self.edit_note_heading_anchor,
                                                         ).unwrap_or((self.edit_note_heading_cursor, self.edit_note_heading_cursor));
 
-                                                        for i in 0..=char_count {
-                                                            if is_focused
-                                                                && ((sel_start == sel_end && i == sel_start)
-                                                                    || (sel_start < sel_end
-                                                                        && i >= sel_start
-                                                                        && i < sel_end))
-                                                            {
-                                                                let char_str = self
-                                                                    .edit_note_heading
-                                                                    .chars()
-                                                                    .nth(i)
-                                                                    .map(|c| c.to_string())
-                                                                    .unwrap_or_else(|| {
-                                                                        " ".to_string()
-                                                                    });
-                                                                els.push(
-                                                                    div()
-                                                                        .bg(if sel_start < sel_end {
-                                                                            rgb(0x264f78)
-                                                                        } else {
-                                                                            rgb(0x0078d4)
-                                                                        })
-                                                                        .text_color(rgb(0xffffff))
-                                                                        .child(char_str)
-                                                                        .into_any_element(),
-                                                                );
-                                                            } else if i < char_count {
-                                                                let char_str = self
-                                                                    .edit_note_heading
-                                                                    .chars()
-                                                                    .nth(i)
-                                                                    .unwrap()
-                                                                    .to_string();
-                                                                els.push(
-                                                                    div()
-                                                                        .child(char_str)
-                                                                        .into_any_element(),
-                                                                );
+                                                        let has_selection = sel_start < sel_end;
+                                                        let text = &self.edit_note_heading;
+                                                        let chars: Vec<char> = text.chars().collect();
+
+                                                        let before: String = chars[..sel_start.min(chars.len())].iter().collect();
+                                                        let selected: String = chars[sel_start.min(chars.len())..sel_end.min(chars.len())].iter().collect();
+                                                        let after: String = chars[sel_end.min(chars.len())..].iter().collect();
+
+                                                        let mut els: Vec<AnyElement> = Vec::new();
+                                                        if is_focused && !has_selection {
+                                                            if !before.is_empty() {
+                                                                els.push(div().child(before).into_any_element());
                                                             }
+                                                            els.push(
+                                                                div()
+                                                                    .w(px(1.5))
+                                                                    .h(px(14.0))
+                                                                    .bg(if self.cursor_visible {
+                                                                        rgb(0x0078d4)
+                                                                    } else {
+                                                                        rgba(0x00000000)
+                                                                    })
+                                                                    .flex_shrink_0()
+                                                                    .mr(px(-1.5))
+                                                                    .into_any_element(),
+                                                            );
+                                                            if !after.is_empty() {
+                                                                els.push(div().child(after).into_any_element());
+                                                            }
+                                                        } else if has_selection {
+                                                            if !before.is_empty() {
+                                                                els.push(div().child(before).into_any_element());
+                                                            }
+                                                            els.push(
+                                                                div()
+                                                                    .bg(rgb(0x264f78))
+                                                                    .text_color(rgb(0xffffff))
+                                                                    .child(selected)
+                                                                    .into_any_element(),
+                                                            );
+                                                            if !after.is_empty() {
+                                                                els.push(div().child(after).into_any_element());
+                                                            }
+                                                        } else {
+                                                            els.push(div().child(text.clone()).into_any_element());
                                                         }
 
                                                         div()
@@ -212,6 +230,7 @@ impl NotesApp {
                                                                     this.edit_note_heading_cursor = click_idx;
                                                                     this.edit_note_heading_anchor = Some(click_idx);
                                                                     this.is_selecting_note_heading = true;
+                                                                    this.cursor_visible = true;
                                                                     cx.notify();
                                                                     cx.stop_propagation();
                                                                 }),

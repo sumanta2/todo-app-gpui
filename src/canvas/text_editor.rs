@@ -1,5 +1,5 @@
 use gpui::{
-    div, prelude::*, px, rgb, AnyElement, ClipboardItem, Context, FocusHandle, Focusable, KeyDownEvent,
+    div, prelude::*, px, rgb, rgba, AnyElement, ClipboardItem, Context, FocusHandle, Focusable, KeyDownEvent,
 };
 use std::ops::Range;
 
@@ -11,6 +11,7 @@ pub struct TextEditor {
     pub anchor: Option<usize>,
     pub focus_handle: FocusHandle,
     pub is_selecting: bool,
+    pub cursor_visible: bool,
 }
 
 #[allow(dead_code)]
@@ -23,6 +24,7 @@ impl TextEditor {
             anchor: None,
             focus_handle: cx.focus_handle(),
             is_selecting: false,
+            cursor_visible: true,
         }
     }
 
@@ -184,6 +186,7 @@ impl TextEditor {
         event: &KeyDownEvent,
         cx: &mut Context<T>,
     ) -> bool {
+        self.cursor_visible = true;
         let key = event.keystroke.key.as_str();
         let control = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
         let shift = event.keystroke.modifiers.shift;
@@ -282,8 +285,13 @@ impl TextEditor {
                     div()
                         .w(px(2.0))
                         .h(px(16.0))
-                        .bg(rgb(0x0078d4))
+                        .bg(if self.cursor_visible {
+                            rgb(0x0078d4)
+                        } else {
+                            rgba(0x00000000)
+                        })
                         .flex_shrink_0()
+                        .mr(px(-2.0))
                 } else {
                     div()
                 })
@@ -390,8 +398,13 @@ impl TextEditor {
                         div()
                             .w(px(2.0))
                             .h(px(16.0))
-                            .bg(rgb(0x0078d4))
-                            .flex_shrink_0(),
+                            .bg(if self.cursor_visible {
+                                rgb(0x0078d4)
+                            } else {
+                                rgba(0x00000000)
+                            })
+                            .flex_shrink_0()
+                            .mr(px(-2.0)),
                     );
                     if !after_str.is_empty() {
                         row = row.child(

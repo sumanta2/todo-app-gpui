@@ -272,12 +272,23 @@ impl TextEditor {
     }
 
     pub fn render_editor(&self, is_focused: bool) -> AnyElement {
+        self.render_editor_with_line_wrapper(is_focused, |_, _, _, row| row.into_any_element())
+    }
+
+    pub fn render_editor_with_line_wrapper<F>(
+        &self,
+        is_focused: bool,
+        mut line_wrapper: F,
+    ) -> AnyElement
+    where
+        F: FnMut(usize, usize, &str, gpui::Div) -> AnyElement,
+    {
         let text = self.text.as_str();
         let cursor_idx = self.cursor;
         let selection_range = self.selection();
 
         if text.is_empty() {
-            return div()
+            let row = div()
                 .relative()
                 .flex()
                 .items_center()
@@ -297,8 +308,8 @@ impl TextEditor {
                 } else {
                     div()
                 })
-                .child(div().text_color(rgb(0x606060)).child("Type note..."))
-                .into_any_element();
+                .child(div().text_color(rgb(0x606060)).child("Type note..."));
+            return line_wrapper(0, 0, "", row).into_any_element();
         }
 
         let logical_lines: Vec<&str> = text.split('\n').collect();
@@ -438,7 +449,8 @@ impl TextEditor {
                 );
             }
 
-            line_rows.push(row.into_any_element());
+            let row = line_wrapper(line_idx, line_start, line, row);
+            line_rows.push(row);
             global_offset += line_len + 1; // +1 for \n
         }
 

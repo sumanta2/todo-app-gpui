@@ -39,7 +39,7 @@ impl NotesApp {
             pan_has_dragged: false,
             pan_start_mouse: None,
             pan_start_val: None,
-            canvas_top_y: 64.0,
+            canvas_top_y: 78.0,
             focus_handle: cx.focus_handle(),
             active_section_id: None,
             active_page_id: None,

@@ -127,8 +127,7 @@ impl NotesApp {
                                     ),
                             ),
                     );
-
-                    // Text Editor content or static presentation
+                    // Text Editor content or static presentation
                     if is_active {
                         let text_editor = crate::canvas::text_editor::TextEditor {
                             text: self.edit_body.clone(),
@@ -142,6 +141,51 @@ impl NotesApp {
                         let t_id_for_down_left = t_id_clone.clone();
                         let t_id_for_down_right = t_id_clone.clone();
                         let t_pos_move = t_pos;
+
+                        let line_wrapper = |line_idx: usize, line_start: usize, line_str: &str, row: gpui::Div| {
+                            let t_id_for_line = t_id_clone.clone();
+                            let line_str_owned = line_str.to_string();
+                            row.id(("editor-line-row", id_num.wrapping_add(line_idx)))
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
+                                        this.focus_handle.focus(window, cx);
+                                        this.is_panning = false;
+                                        this.pan_start_mouse = None;
+                                        this.pan_start_val = None;
+                                        this.sync_active_text_block();
+                                        this.active_text_block_id = Some(t_id_for_line.clone());
+                                        this.active_field = ActiveField::Body;
+
+                                        let item_x = if let Some(CanvasItem::Text(tx)) = this
+                                            .edit_canvas_items
+                                            .iter()
+                                            .find(|item| match item {
+                                                CanvasItem::Text(blk) => blk.id == t_id_for_line,
+                                                _ => false,
+                                            })
+                                        {
+                                            this.edit_body = tx.text.clone();
+                                            tx.x
+                                        } else {
+                                            t_pos.0
+                                        };
+
+                                        let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
+                                        let rel_x = (event.position.x.as_f32() - sidebar_w - this.pan_x - item_x - 6.0).max(0.0);
+                                        let local_idx = crate::helpers::calculate_line_text_offset(rel_x, &line_str_owned, 12.0);
+                                        let click_idx = (line_start + local_idx).min(this.edit_body.chars().count());
+
+                                        this.edit_body_cursor = click_idx;
+                                        this.edit_body_anchor = Some(click_idx);
+                                        this.is_selecting_body = true;
+                                        this.cursor_visible = true;
+                                        cx.notify();
+                                        cx.stop_propagation();
+                                    }),
+                                )
+                                .into_any_element()
+                        };
 
                         inner_block = inner_block.child(
                             div()
@@ -307,12 +351,75 @@ impl NotesApp {
                                         }
                                     }),
                                 )
-                                .child(div().w(px(textbox_width - 16.0)).child(text_editor.render_editor(is_body_focused))),
+                                .child(div().w(px(textbox_width - 16.0)).child(text_editor.render_editor_with_line_wrapper(is_body_focused, line_wrapper))),
                         );
                     } else {
                         let t_id_for_inactive_left = t_id_clone.clone();
                         let t_id_for_inactive_right = t_id_clone.clone();
                         let t_pos_move = t_pos;
+                        let text_content = t.text.clone();
+
+                        let mut inactive_line_rows = Vec::new();
+                        let mut global_offset = 0;
+                        for (line_idx, line_str) in text_content.split('\n').enumerate() {
+                            let line_len = line_str.chars().count();
+                            let line_start = global_offset;
+                            let line_str_owned = line_str.to_string();
+                            let t_id_for_line = t_id_clone.clone();
+                            let line_display = if line_str.is_empty() {
+                                "\u{00A0}".to_string()
+                            } else {
+                                line_str.replace(' ', "\u{00A0}")
+                            };
+
+                            let line_el = div()
+                                .id(("inactive-line-row", id_num.wrapping_add(line_idx)))
+                                .min_h(px(20.0))
+                                .flex()
+                                .items_center()
+                                .child(line_display)
+                                .on_mouse_down(
+                                    MouseButton::Left,
+                                    cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
+                                        this.focus_handle.focus(window, cx);
+                                        this.is_panning = false;
+                                        this.pan_start_mouse = None;
+                                        this.pan_start_val = None;
+                                        this.sync_active_text_block();
+                                        this.active_text_block_id = Some(t_id_for_line.clone());
+                                        this.active_field = ActiveField::Body;
+
+                                        let item_x = if let Some(CanvasItem::Text(tx)) = this
+                                            .edit_canvas_items
+                                            .iter()
+                                            .find(|item| match item {
+                                                CanvasItem::Text(blk) => blk.id == t_id_for_line,
+                                                _ => false,
+                                            })
+                                        {
+                                            this.edit_body = tx.text.clone();
+                                            tx.x
+                                        } else {
+                                            t_pos_move.0
+                                        };
+
+                                        let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
+                                        let rel_x = (event.position.x.as_f32() - sidebar_w - this.pan_x - item_x - 6.0).max(0.0);
+                                        let local_idx = crate::helpers::calculate_line_text_offset(rel_x, &line_str_owned, 12.0);
+                                        let click_idx = (line_start + local_idx).min(this.edit_body.chars().count());
+
+                                        this.edit_body_cursor = click_idx;
+                                        this.edit_body_anchor = Some(click_idx);
+                                        this.is_selecting_body = true;
+                                        this.cursor_visible = true;
+                                        cx.notify();
+                                        cx.stop_propagation();
+                                    }),
+                                );
+
+                            inactive_line_rows.push(line_el.into_any_element());
+                            global_offset += line_len + 1;
+                        }
 
                         inner_block = inner_block.child(
                             div()
@@ -414,79 +521,12 @@ impl NotesApp {
                                         },
                                     ),
                                 )
-                                .on_mouse_move(cx.listener(
-                                    move |this, event: &gpui::MouseMoveEvent, _, cx| {
-                                        if this.is_selecting_body {
-                                            let (item_x, item_y, item_w) = if let Some(ref active_id) = this.active_text_block_id {
-                                                if let Some(CanvasItem::Text(tx)) = this.edit_canvas_items.iter().find(|i| match i {
-                                                    CanvasItem::Text(t) => t.id == *active_id,
-                                                    _ => false,
-                                                }) {
-                                                    (tx.x, tx.y, tx.width.unwrap_or(250.0))
-                                                } else {
-                                                    (t_pos_move.0, t_pos_move.1, textbox_width)
-                                                }
-                                            } else {
-                                                (t_pos_move.0, t_pos_move.1, textbox_width)
-                                            };
-                                            let anchor = this
-                                                .edit_body_anchor
-                                                .unwrap_or(this.edit_body_cursor);
-                                            let drag_idx = calculate_canvas_drag_offset(
-                                                event.position,
-                                                this.is_sidebar_open,
-                                                this.pan_x,
-                                                this.pan_y,
-                                                item_x,
-                                                item_y,
-                                                this.canvas_top_y,
-                                                &this.edit_body,
-                                                anchor,
-                                                item_w,
-                                            );
-                                            this.edit_body_cursor = drag_idx;
-                                            cx.notify();
-                                            cx.stop_propagation();
-                                        }
-                                    },
-                                ))
-                                .on_mouse_up(
-                                    MouseButton::Left,
-                                    cx.listener(move |this, _, _, cx| {
-                                        if this.is_selecting_body {
-                                            if this.edit_body_anchor == Some(this.edit_body_cursor)
-                                            {
-                                                this.edit_body_anchor = None;
-                                            }
-                                            this.is_selecting_body = false;
-                                            cx.notify();
-                                            cx.stop_propagation();
-                                        }
-                                    }),
-                                )
-                                .on_mouse_up(
-                                    MouseButton::Right,
-                                    cx.listener(move |this, _, _, cx| {
-                                        if this.is_selecting_body {
-                                            if this.edit_body_anchor == Some(this.edit_body_cursor)
-                                            {
-                                                this.edit_body_anchor = None;
-                                            }
-                                            this.is_selecting_body = false;
-                                            cx.notify();
-                                            cx.stop_propagation();
-                                        }
-                                    }),
-                                )
                                 .child(
                                     div()
                                         .w(px(textbox_width - 16.0))
                                         .flex()
-                                        .flex_row()
-                                        .flex_wrap()
-                                        .children(t.text.lines().map(|line| {
-                                            div().w(px(textbox_width - 16.0)).child(line.to_owned())
-                                        })),
+                                        .flex_col()
+                                        .children(inactive_line_rows),
                                 ),
                         );
                     }

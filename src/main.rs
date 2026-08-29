@@ -4,6 +4,7 @@ mod app;
 mod canvas;
 mod helpers;
 mod models;
+mod text_selection;
 mod views;
 
 use gpui::{

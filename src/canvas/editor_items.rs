@@ -2,8 +2,10 @@ use gpui::{div, img, prelude::*, px, rgb, AnyElement, Context, MouseButton};
 use std::sync::Arc;
 
 use crate::app::NotesApp;
-use crate::helpers::{calculate_canvas_drag_offset, calculate_canvas_text_offset};
 use crate::models::{ActiveField, CanvasItem};
+use crate::text_selection::{
+    calculate_canvas_drag_offset, calculate_canvas_text_offset, calculate_line_text_offset,
+};
 
 impl NotesApp {
     pub(crate) fn render_canvas_elements(
@@ -173,7 +175,7 @@ impl NotesApp {
 
                                         let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
                                         let rel_x = (event.position.x.as_f32() - sidebar_w - this.pan_x - item_x - 6.0).max(0.0);
-                                        let local_idx = crate::helpers::calculate_line_text_offset(rel_x, &line_str_owned, 12.0);
+                                        let local_idx = calculate_line_text_offset(rel_x, &line_str_owned, 12.0);
                                         let click_idx = (line_start + local_idx).min(this.edit_body.chars().count());
 
                                         this.edit_body_cursor = click_idx;
@@ -405,7 +407,7 @@ impl NotesApp {
 
                                         let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
                                         let rel_x = (event.position.x.as_f32() - sidebar_w - this.pan_x - item_x - 6.0).max(0.0);
-                                        let local_idx = crate::helpers::calculate_line_text_offset(rel_x, &line_str_owned, 12.0);
+                                        let local_idx = calculate_line_text_offset(rel_x, &line_str_owned, 12.0);
                                         let click_idx = (line_start + local_idx).min(this.edit_body.chars().count());
 
                                         this.edit_body_cursor = click_idx;

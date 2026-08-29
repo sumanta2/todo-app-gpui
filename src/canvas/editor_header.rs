@@ -1,8 +1,9 @@
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, MouseButton};
 
 use crate::app::NotesApp;
-use crate::helpers::{calculate_line_text_offset, hash_str};
+use crate::helpers::hash_str;
 use crate::models::{ActiveField, NoteContent};
+use crate::text_selection::calculate_line_text_offset;
 
 impl NotesApp {
     fn build_section_name_editor(&self, is_focused: bool, cx: &mut Context<Self>) -> AnyElement {

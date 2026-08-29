@@ -2,10 +2,11 @@ use gpui::{div, img, prelude::*, px, rgb, AnyElement, Context, IntoElement, Mous
 use std::sync::Arc;
 
 use crate::app::NotesApp;
-use crate::helpers::{
-    calculate_canvas_drag_offset_with_header, calculate_canvas_text_offset_with_header, hash_str,
-};
+use crate::helpers::hash_str;
 use crate::models::{load_canvas_items, CanvasItem, Note, NoteContent};
+use crate::text_selection::{
+    calculate_canvas_drag_offset_with_header, calculate_canvas_text_offset_with_header,
+};
 
 impl NotesApp {
     pub(crate) fn render_canvas_viewer(

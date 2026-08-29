@@ -1,8 +1,8 @@
 use gpui::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButton, Window};
 
 use crate::app::NotesApp;
-use crate::helpers::{calculate_canvas_drag_offset, calculate_line_text_offset};
 use crate::models::{ActiveField, CanvasItem, Note, NoteContent, TextItem};
+use crate::text_selection::{calculate_canvas_drag_offset, calculate_line_text_offset};
 
 impl NotesApp {
     pub(crate) fn render_canvas_editor(

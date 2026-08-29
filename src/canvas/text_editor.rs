@@ -158,7 +158,7 @@ impl TextEditor {
     }
 
     pub fn move_up(&mut self, extend_selection: bool) {
-        let next_pos = crate::helpers::move_cursor_up(&self.text, self.cursor);
+        let next_pos = crate::text_selection::move_cursor_up(&self.text, self.cursor);
         if extend_selection {
             if self.anchor.is_none() {
                 self.anchor = Some(self.cursor);
@@ -170,7 +170,7 @@ impl TextEditor {
     }
 
     pub fn move_down(&mut self, extend_selection: bool) {
-        let next_pos = crate::helpers::move_cursor_down(&self.text, self.cursor);
+        let next_pos = crate::text_selection::move_cursor_down(&self.text, self.cursor);
         if extend_selection {
             if self.anchor.is_none() {
                 self.anchor = Some(self.cursor);

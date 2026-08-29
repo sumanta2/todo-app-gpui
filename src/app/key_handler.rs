@@ -1,11 +1,12 @@
 use gpui::Context;
 
 use crate::app::NotesApp;
-use crate::helpers::{
-    get_selection_range, move_cursor_down, move_cursor_up, move_cursor_word_left,
-    move_cursor_word_right, replace_range,
-};
+use crate::helpers::replace_range;
 use crate::models::{load_canvas_items, load_note_content, ActiveField, CanvasItem, TextItem};
+use crate::text_selection::{
+    get_selection_range, move_cursor_down, move_cursor_up, move_cursor_word_left,
+    move_cursor_word_right,
+};
 
 impl NotesApp {
     pub(crate) fn handle_key(&mut self, event: &gpui::KeyDownEvent, cx: &mut Context<Self>) {

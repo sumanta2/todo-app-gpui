@@ -1,8 +1,8 @@
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, MouseButton, Window};
 
 use crate::app::NotesApp;
-use crate::helpers::{calculate_line_text_offset, get_selection_range};
 use crate::models::ActiveField;
+use crate::text_selection::{calculate_line_text_offset, get_selection_range};
 
 impl NotesApp {
     pub(crate) fn render_sidebar(

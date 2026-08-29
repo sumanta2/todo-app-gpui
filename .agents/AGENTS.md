@@ -16,7 +16,8 @@ todo-app-gpui/
 ├── src/
 │   ├── main.rs              # Application entry point, window management, root App render
 │   ├── models.rs            # Plain Data Models (Note, NotePage, NoteSection, CanvasItem) & Serialization
-│   ├── helpers.rs           # Utilities: Encryption, selection computation, range replacement
+│   ├── helpers.rs           # Utilities: Hashing, encryption, range replacement
+│   ├── text_selection.rs    # Text selection, char width, hit testing & cursor navigation
 │   ├── app/                 # Application Controller & State Mutations
 │   │   ├── mod.rs           # NotesApp struct definition & Focusable implementation
 │   │   ├── storage.rs       # Persistence (notes.json), storage paths & image XOR encryption

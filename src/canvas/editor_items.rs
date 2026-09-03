@@ -4,7 +4,7 @@ use std::sync::Arc;
 use crate::app::NotesApp;
 use crate::models::{ActiveField, CanvasItem};
 use crate::text_selection::{
-    calculate_canvas_drag_offset, calculate_canvas_text_offset, calculate_line_text_offset,
+    calculate_canvas_drag_offset, calculate_canvas_text_offset,
 };
 
 impl NotesApp {
@@ -116,11 +116,11 @@ impl NotesApp {
                                             this.edit_canvas_items.retain(|item| match item {
                                                 CanvasItem::Text(tx) => tx.id != delete_id,
                                                 _ => true,
-                                            });
-                                            if this.active_text_block_id == Some(delete_id.clone())
+                                            });                                            if this.active_text_block_id == Some(delete_id.clone())
                                             {
                                                 this.active_text_block_id = None;
                                                 this.edit_body = String::new();
+                                                this.edit_body_bold = Vec::new();
                                                 this.edit_body_cursor = 0;
                                             }
                                             cx.notify();
@@ -129,10 +129,11 @@ impl NotesApp {
                                     ),
                             ),
                     );
-                    // Text Editor content or static presentation
+                    // Text Editor content or static presentation
                     if is_active {
                         let text_editor = crate::canvas::text_editor::TextEditor {
                             text: self.edit_body.clone(),
+                            bold_flags: self.edit_body_bold.clone(),
                             cursor: self.edit_body_cursor,
                             anchor: self.edit_body_anchor,
                             focus_handle: self.focus_handle.clone(),
@@ -168,6 +169,10 @@ impl NotesApp {
                                             })
                                         {
                                             this.edit_body = tx.text.clone();
+                                            this.edit_body_bold = crate::helpers::spans_to_bool_vec(
+                                                &tx.bold_spans,
+                                                this.edit_body.chars().count(),
+                                            );
                                             tx.x
                                         } else {
                                             t_pos.0
@@ -175,7 +180,19 @@ impl NotesApp {
 
                                         let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
                                         let rel_x = (event.position.x.as_f32() - sidebar_w - this.pan_x - item_x - 6.0).max(0.0);
-                                        let local_idx = calculate_line_text_offset(rel_x, &line_str_owned, 12.0);
+                                        let line_len = line_str_owned.chars().count();
+                                        let line_flags = if line_start < this.edit_body_bold.len() {
+                                            let end = (line_start + line_len).min(this.edit_body_bold.len());
+                                            Some(&this.edit_body_bold[line_start..end])
+                                        } else {
+                                            None
+                                        };
+                                        let local_idx = crate::text_selection::calculate_line_text_offset_with_bold(
+                                            rel_x,
+                                            &line_str_owned,
+                                            line_flags,
+                                            12.0,
+                                        );
                                         let click_idx = (line_start + local_idx).min(this.edit_body.chars().count());
 
                                         this.edit_body_cursor = click_idx;
@@ -218,6 +235,10 @@ impl NotesApp {
                                                 })
                                             {
                                                 this.edit_body = tx.text.clone();
+                                                this.edit_body_bold = crate::helpers::spans_to_bool_vec(
+                                                    &tx.bold_spans,
+                                                    this.edit_body.chars().count(),
+                                                );
                                                 (tx.x, tx.y)
                                             } else {
                                                 t_pos
@@ -265,6 +286,10 @@ impl NotesApp {
                                                 })
                                             {
                                                 this.edit_body = tx.text.clone();
+                                                this.edit_body_bold = crate::helpers::spans_to_bool_vec(
+                                                    &tx.bold_spans,
+                                                    this.edit_body.chars().count(),
+                                                );
                                                 (tx.x, tx.y)
                                             } else {
                                                 t_pos
@@ -360,26 +385,63 @@ impl NotesApp {
                         let t_id_for_inactive_right = t_id_clone.clone();
                         let t_pos_move = t_pos;
                         let text_content = t.text.clone();
+                        let total_chars = text_content.chars().count();
+                        let bold_flags = crate::helpers::spans_to_bool_vec(&t.bold_spans, total_chars);
 
                         let mut inactive_line_rows = Vec::new();
                         let mut global_offset = 0;
                         for (line_idx, line_str) in text_content.split('\n').enumerate() {
                             let line_len = line_str.chars().count();
                             let line_start = global_offset;
+                            let line_end = global_offset + line_len;
                             let line_str_owned = line_str.to_string();
                             let t_id_for_line = t_id_clone.clone();
-                            let line_display = if line_str.is_empty() {
-                                "\u{00A0}".to_string()
+
+                            let line_flags = if line_start < bold_flags.len() {
+                                let end = line_end.min(bold_flags.len());
+                                let mut f = bold_flags[line_start..end].to_vec();
+                                if f.len() < line_len {
+                                    f.resize(line_len, false);
+                                }
+                                f
                             } else {
-                                line_str.replace(' ', "\u{00A0}")
+                                vec![false; line_len]
                             };
+
+                            let runs = crate::helpers::split_text_into_styled_runs(line_str, &line_flags);
+                            let mut line_runs_els = Vec::new();
+                            if runs.is_empty() {
+                                line_runs_els.push(
+                                    div()
+                                        .text_color(rgb(0xd4d4d4))
+                                        .child("\u{00A0}")
+                                        .into_any_element(),
+                                );
+                            } else {
+                                for run in &runs {
+                                    let disp = run.text.replace(' ', "\u{00A0}");
+                                    let el = div()
+                                        .text_color(if run.is_bold {
+                                            rgb(0xffffff)
+                                        } else {
+                                            rgb(0xd4d4d4)
+                                        })
+                                        .font_weight(if run.is_bold {
+                                            gpui::FontWeight::BOLD
+                                        } else {
+                                            gpui::FontWeight::NORMAL
+                                        })
+                                        .child(disp);
+                                    line_runs_els.push(el.into_any_element());
+                                }
+                            }
 
                             let line_el = div()
                                 .id(("inactive-line-row", id_num.wrapping_add(line_idx)))
                                 .min_h(px(20.0))
                                 .flex()
                                 .items_center()
-                                .child(line_display)
+                                .children(line_runs_els)
                                 .on_mouse_down(
                                     MouseButton::Left,
                                     cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
@@ -400,6 +462,10 @@ impl NotesApp {
                                             })
                                         {
                                             this.edit_body = tx.text.clone();
+                                            this.edit_body_bold = crate::helpers::spans_to_bool_vec(
+                                                &tx.bold_spans,
+                                                this.edit_body.chars().count(),
+                                            );
                                             tx.x
                                         } else {
                                             t_pos_move.0
@@ -407,7 +473,19 @@ impl NotesApp {
 
                                         let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
                                         let rel_x = (event.position.x.as_f32() - sidebar_w - this.pan_x - item_x - 6.0).max(0.0);
-                                        let local_idx = calculate_line_text_offset(rel_x, &line_str_owned, 12.0);
+                                        let line_len = line_str_owned.chars().count();
+                                        let line_flags = if line_start < this.edit_body_bold.len() {
+                                            let end = (line_start + line_len).min(this.edit_body_bold.len());
+                                            Some(&this.edit_body_bold[line_start..end])
+                                        } else {
+                                            None
+                                        };
+                                        let local_idx = crate::text_selection::calculate_line_text_offset_with_bold(
+                                            rel_x,
+                                            &line_str_owned,
+                                            line_flags,
+                                            12.0,
+                                        );
                                         let click_idx = (line_start + local_idx).min(this.edit_body.chars().count());
 
                                         this.edit_body_cursor = click_idx;
@@ -452,6 +530,10 @@ impl NotesApp {
                                                 })
                                             {
                                                 this.edit_body = tx.text.clone();
+                                                this.edit_body_bold = crate::helpers::spans_to_bool_vec(
+                                                    &tx.bold_spans,
+                                                    this.edit_body.chars().count(),
+                                                );
                                                 (tx.x, tx.y)
                                             } else {
                                                 t_pos
@@ -499,6 +581,10 @@ impl NotesApp {
                                                 })
                                             {
                                                 this.edit_body = tx.text.clone();
+                                                this.edit_body_bold = crate::helpers::spans_to_bool_vec(
+                                                    &tx.bold_spans,
+                                                    this.edit_body.chars().count(),
+                                                );
                                                 (tx.x, tx.y)
                                             } else {
                                                 t_pos

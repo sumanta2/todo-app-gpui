@@ -24,6 +24,7 @@ pub struct NotesApp {
     pub(crate) edit_body_anchor: Option<usize>,
     pub(crate) is_selecting_body: bool,
     pub(crate) edit_images: Vec<String>,
+    pub(crate) edit_body_bold: Vec<bool>,
 
     // Canvas State
     pub(crate) edit_canvas_items: Vec<CanvasItem>,

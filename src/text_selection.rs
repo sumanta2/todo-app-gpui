@@ -58,6 +58,15 @@ pub(crate) fn get_char_width(ch: char, font_size: f32) -> f32 {
 }
 
 pub(crate) fn calculate_line_text_offset(rel_x: f32, text: &str, font_size: f32) -> usize {
+    calculate_line_text_offset_with_bold(rel_x, text, None, font_size)
+}
+
+pub(crate) fn calculate_line_text_offset_with_bold(
+    rel_x: f32,
+    text: &str,
+    bold_flags: Option<&[bool]>,
+    font_size: f32,
+) -> usize {
     let char_count = text.chars().count();
     if text.is_empty() || char_count == 0 || rel_x <= 0.0 {
         return 0;
@@ -66,7 +75,11 @@ pub(crate) fn calculate_line_text_offset(rel_x: f32, text: &str, font_size: f32)
     let mut current_x = 0.0f32;
 
     for (idx, ch) in text.chars().enumerate() {
-        let w = get_char_width(ch, font_size);
+        let is_bold = bold_flags.and_then(|f| f.get(idx).copied()).unwrap_or(false);
+        let mut w = get_char_width(ch, font_size);
+        if is_bold {
+            w *= 1.10;
+        }
         let midpoint = current_x + (w / 2.0);
         let end_x = current_x + w;
 
@@ -107,6 +120,7 @@ pub(crate) fn calculate_canvas_text_offset(
     )
 }
 
+#[allow(dead_code)]
 pub(crate) fn calculate_canvas_text_offset_with_header(
     mouse_pos: gpui::Point<gpui::Pixels>,
     sidebar_open: bool,
@@ -146,6 +160,36 @@ pub(crate) fn calculate_canvas_text_offset_with_header_and_width(
     text: &str,
     header_x_offset: f32,
     header_y_offset: f32,
+    textbox_width: f32,
+) -> usize {
+    calculate_canvas_text_offset_with_header_and_bold(
+        mouse_pos,
+        sidebar_open,
+        pan_x,
+        pan_y,
+        item_x,
+        item_y,
+        canvas_top_y,
+        text,
+        None,
+        header_x_offset,
+        header_y_offset,
+        textbox_width,
+    )
+}
+
+pub(crate) fn calculate_canvas_text_offset_with_header_and_bold(
+    mouse_pos: gpui::Point<gpui::Pixels>,
+    sidebar_open: bool,
+    pan_x: f32,
+    pan_y: f32,
+    item_x: f32,
+    item_y: f32,
+    canvas_top_y: f32,
+    text: &str,
+    bold_flags: Option<&[bool]>,
+    header_x_offset: f32,
+    header_y_offset: f32,
     _textbox_width: f32,
 ) -> usize {
     let sidebar_w = if sidebar_open { 220.0 } else { 44.0 };
@@ -169,39 +213,24 @@ pub(crate) fn calculate_canvas_text_offset_with_header_and_width(
     };
 
     let target_line = logical_lines[target_idx];
-    let line_char_count = target_line.chars().count();
-
-    let local_char_offset = if rel_x <= 0.0 {
-        0
-    } else {
-        let mut current_x = 0.0f32;
-        let mut found = None;
-
-        for (idx, ch) in target_line.chars().enumerate() {
-            let w = get_char_width(ch, 12.0);
-            let midpoint = current_x + (w / 2.0);
-            let end_x = current_x + w;
-
-            if rel_x < midpoint {
-                found = Some(idx);
-                break;
-            } else if rel_x < end_x {
-                found = Some(idx + 1);
-                break;
-            }
-            current_x = end_x;
-        }
-
-        found.unwrap_or(line_char_count)
-    };
-
-    let mut global_idx = 0;
+    let mut line_start_global = 0;
     for i in 0..target_idx {
-        global_idx += logical_lines[i].chars().count() + 1;
+        line_start_global += logical_lines[i].chars().count() + 1;
     }
-    global_idx += local_char_offset;
 
-    global_idx.min(total_char_count)
+    let target_line_len = target_line.chars().count();
+    let line_flags = bold_flags.and_then(|flags| {
+        if line_start_global < flags.len() {
+            let end = (line_start_global + target_line_len).min(flags.len());
+            Some(&flags[line_start_global..end])
+        } else {
+            None
+        }
+    });
+
+    let local_char_offset = calculate_line_text_offset_with_bold(rel_x, target_line, line_flags, 12.0);
+
+    (line_start_global + local_char_offset).min(total_char_count)
 }
 
 pub(crate) fn calculate_canvas_drag_offset(
@@ -231,6 +260,7 @@ pub(crate) fn calculate_canvas_drag_offset(
     )
 }
 
+#[allow(dead_code)]
 pub(crate) fn calculate_canvas_drag_offset_with_header(
     mouse_pos: gpui::Point<gpui::Pixels>,
     sidebar_open: bool,
@@ -240,12 +270,12 @@ pub(crate) fn calculate_canvas_drag_offset_with_header(
     item_y: f32,
     canvas_top_y: f32,
     text: &str,
-    _anchor_idx: usize,
+    anchor_idx: usize,
     header_x_offset: f32,
     header_y_offset: f32,
     textbox_width: f32,
 ) -> usize {
-    calculate_canvas_text_offset_with_header_and_width(
+    calculate_canvas_drag_offset_with_bold(
         mouse_pos,
         sidebar_open,
         pan_x,
@@ -254,6 +284,39 @@ pub(crate) fn calculate_canvas_drag_offset_with_header(
         item_y,
         canvas_top_y,
         text,
+        None,
+        anchor_idx,
+        header_x_offset,
+        header_y_offset,
+        textbox_width,
+    )
+}
+
+pub(crate) fn calculate_canvas_drag_offset_with_bold(
+    mouse_pos: gpui::Point<gpui::Pixels>,
+    sidebar_open: bool,
+    pan_x: f32,
+    pan_y: f32,
+    item_x: f32,
+    item_y: f32,
+    canvas_top_y: f32,
+    text: &str,
+    bold_flags: Option<&[bool]>,
+    _anchor_idx: usize,
+    header_x_offset: f32,
+    header_y_offset: f32,
+    textbox_width: f32,
+) -> usize {
+    calculate_canvas_text_offset_with_header_and_bold(
+        mouse_pos,
+        sidebar_open,
+        pan_x,
+        pan_y,
+        item_x,
+        item_y,
+        canvas_top_y,
+        text,
+        bold_flags,
         header_x_offset,
         header_y_offset,
         textbox_width,

@@ -25,6 +25,7 @@ impl NotesApp {
             edit_body_anchor: None,
             is_selecting_body: false,
             edit_images: Vec::new(),
+            edit_body_bold: Vec::new(),
             edit_canvas_items: Vec::new(),
             active_text_block_id: None,
             drag_item_id: None,
@@ -208,6 +209,7 @@ impl NotesApp {
 
                         self.active_text_block_id = None;
                         self.edit_body = String::new();
+                        self.edit_body_bold = Vec::new();
                         self.edit_body_cursor = 0;
                         self.edit_body_anchor = None;
                     }
@@ -382,6 +384,7 @@ impl NotesApp {
                 self.is_selecting_heading = false;
                 self.active_text_block_id = None;
                 self.edit_body = String::new();
+                self.edit_body_bold = Vec::new();
                 self.edit_body_cursor = 0;
                 self.edit_body_anchor = None;
                 self.is_selecting_body = false;
@@ -418,6 +421,7 @@ impl NotesApp {
                 }) {
                     if let CanvasItem::Text(t) = item {
                         t.text = self.edit_body.clone();
+                        t.bold_spans = crate::helpers::bool_vec_to_spans(&self.edit_body_bold);
 
                         let max_line_len = self
                             .edit_body
@@ -489,6 +493,42 @@ impl NotesApp {
             self.is_editing = false;
         }
         self.save_notes();
+        cx.notify();
+    }
+
+    pub(crate) fn toggle_bold(&mut self, cx: &mut Context<Self>) {
+        if self.active_field != ActiveField::Body {
+            return;
+        }
+
+        let char_count = self.edit_body.chars().count();
+        if self.edit_body_bold.len() < char_count {
+            self.edit_body_bold.resize(char_count, false);
+        }
+
+        if let Some((start, end)) = crate::text_selection::get_selection_range(
+            self.edit_body_cursor,
+            self.edit_body_anchor,
+        ) {
+            let start = start.min(char_count);
+            let end = end.min(char_count);
+            if start < end {
+                let all_bold = self.edit_body_bold[start..end].iter().all(|&b| b);
+                let new_bold = !all_bold;
+                for i in start..end {
+                    self.edit_body_bold[i] = new_bold;
+                }
+            }
+        } else {
+            let pos = self.edit_body_cursor;
+            if pos < char_count {
+                self.edit_body_bold[pos] = !self.edit_body_bold[pos];
+            } else if pos > 0 && pos - 1 < char_count {
+                self.edit_body_bold[pos - 1] = !self.edit_body_bold[pos - 1];
+            }
+        }
+
+        self.sync_active_text_block();
         cx.notify();
     }
 }

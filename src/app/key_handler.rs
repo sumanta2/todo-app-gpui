@@ -21,6 +21,12 @@ impl NotesApp {
             return;
         }
 
+        // Shortcut: Ctrl + B (Toggle Bold on Selected Text or Character)
+        if control && key.eq_ignore_ascii_case("b") {
+            self.toggle_bold(cx);
+            return;
+        }
+
         // Shortcut: Escape (Discard changes or close menu)
         if key.eq_ignore_ascii_case("escape") {
             if self.is_editing {
@@ -146,6 +152,10 @@ impl NotesApp {
                                 })
                             {
                                 self.edit_body = t.text.clone();
+                                self.edit_body_bold = crate::helpers::spans_to_bool_vec(
+                                    &t.bold_spans,
+                                    self.edit_body.chars().count(),
+                                );
                                 self.edit_body_cursor = self.edit_body.chars().count();
                                 self.edit_body_anchor = None;
                             }
@@ -157,10 +167,12 @@ impl NotesApp {
                                 y: 50.0,
                                 text: String::new(),
                                 width: Some(250.0),
+                                bold_spans: Vec::new(),
                             };
                             self.edit_canvas_items.push(CanvasItem::Text(new_text_item));
                             self.active_text_block_id = Some(new_id);
                             self.edit_body = String::new();
+                            self.edit_body_bold = Vec::new();
                             self.edit_body_cursor = 0;
                             self.edit_body_anchor = None;
                         }
@@ -353,6 +365,9 @@ impl NotesApp {
                         text.chars().skip(start).take(end - start).collect();
                     cx.write_to_clipboard(gpui::ClipboardItem::new_string(selected_chars));
                     replace_range(text, start, end, "");
+                    if self.active_field == ActiveField::Body && end <= self.edit_body_bold.len() {
+                        self.edit_body_bold.drain(start..end);
+                    }
                     *cursor = start;
                     *anchor = None;
                     self.sync_active_text_block();
@@ -367,17 +382,29 @@ impl NotesApp {
                     } else {
                         clipboard_text.replace("\n", " ")
                     };
+                    let paste_len = cleaned_text.chars().count();
                     if let Some((start, end)) = get_selection_range(*cursor, *anchor) {
                         replace_range(text, start, end, &cleaned_text);
-                        *cursor = start + cleaned_text.chars().count();
+                        if self.active_field == ActiveField::Body {
+                            if end <= self.edit_body_bold.len() {
+                                self.edit_body_bold.drain(start..end);
+                            }
+                            for i in 0..paste_len {
+                                self.edit_body_bold.insert(start + i, false);
+                            }
+                        }
+                        *cursor = start + paste_len;
                         *anchor = None;
                     } else {
                         let mut chars: Vec<char> = text.chars().collect();
                         for (idx, ch) in cleaned_text.chars().enumerate() {
                             chars.insert(*cursor + idx, ch);
+                            if self.active_field == ActiveField::Body {
+                                self.edit_body_bold.insert(*cursor + idx, false);
+                            }
                         }
                         *text = chars.into_iter().collect();
-                        *cursor += cleaned_text.chars().count();
+                        *cursor += paste_len;
                     }
                     self.sync_active_text_block();
                     cx.notify();
@@ -391,11 +418,20 @@ impl NotesApp {
             if is_multiline {
                 if let Some((start, end)) = get_selection_range(*cursor, *anchor) {
                     replace_range(text, start, end, "\n");
+                    if self.active_field == ActiveField::Body {
+                        if end <= self.edit_body_bold.len() {
+                            self.edit_body_bold.drain(start..end);
+                        }
+                        self.edit_body_bold.insert(start, false);
+                    }
                     *cursor = start + 1;
                     *anchor = None;
                 } else {
                     let mut chars: Vec<char> = text.chars().collect();
                     chars.insert(*cursor, '\n');
+                    if self.active_field == ActiveField::Body {
+                        self.edit_body_bold.insert(*cursor, false);
+                    }
                     *text = chars.into_iter().collect();
                     *cursor += 1;
                 }
@@ -409,11 +445,17 @@ impl NotesApp {
         if key.eq_ignore_ascii_case("backspace") {
             if let Some((start, end)) = get_selection_range(*cursor, *anchor) {
                 replace_range(text, start, end, "");
+                if self.active_field == ActiveField::Body && end <= self.edit_body_bold.len() {
+                    self.edit_body_bold.drain(start..end);
+                }
                 *cursor = start;
                 *anchor = None;
             } else if *cursor > 0 {
                 let mut chars: Vec<char> = text.chars().collect();
                 chars.remove(*cursor - 1);
+                if self.active_field == ActiveField::Body && *cursor - 1 < self.edit_body_bold.len() {
+                    self.edit_body_bold.remove(*cursor - 1);
+                }
                 *text = chars.into_iter().collect();
                 *cursor -= 1;
             }
@@ -423,6 +465,9 @@ impl NotesApp {
         } else if key.eq_ignore_ascii_case("delete") {
             if let Some((start, end)) = get_selection_range(*cursor, *anchor) {
                 replace_range(text, start, end, "");
+                if self.active_field == ActiveField::Body && end <= self.edit_body_bold.len() {
+                    self.edit_body_bold.drain(start..end);
+                }
                 *cursor = start;
                 *anchor = None;
             } else {
@@ -430,6 +475,9 @@ impl NotesApp {
                 if *cursor < len {
                     let mut chars: Vec<char> = text.chars().collect();
                     chars.remove(*cursor);
+                    if self.active_field == ActiveField::Body && *cursor < self.edit_body_bold.len() {
+                        self.edit_body_bold.remove(*cursor);
+                    }
                     *text = chars.into_iter().collect();
                 }
             }
@@ -446,17 +494,39 @@ impl NotesApp {
                 } else {
                     character.replace("\n", " ")
                 };
+                let char_len = cleaned_char.chars().count();
+                let inherit_bold = if self.active_field == ActiveField::Body {
+                    if *cursor > 0 && *cursor <= self.edit_body_bold.len() {
+                        self.edit_body_bold[*cursor - 1]
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                };
+
                 if let Some((start, end)) = get_selection_range(*cursor, *anchor) {
                     replace_range(text, start, end, &cleaned_char);
-                    *cursor = start + cleaned_char.chars().count();
+                    if self.active_field == ActiveField::Body {
+                        if end <= self.edit_body_bold.len() {
+                            self.edit_body_bold.drain(start..end);
+                        }
+                        for idx in 0..char_len {
+                            self.edit_body_bold.insert(start + idx, inherit_bold);
+                        }
+                    }
+                    *cursor = start + char_len;
                     *anchor = None;
                 } else {
                     let mut chars: Vec<char> = text.chars().collect();
                     for (idx, ch) in cleaned_char.chars().enumerate() {
                         chars.insert(*cursor + idx, ch);
+                        if self.active_field == ActiveField::Body {
+                            self.edit_body_bold.insert(*cursor + idx, inherit_bold);
+                        }
                     }
                     *text = chars.into_iter().collect();
-                    *cursor += cleaned_char.chars().count();
+                    *cursor += char_len;
                 }
                 self.sync_active_text_block();
                 cx.notify();

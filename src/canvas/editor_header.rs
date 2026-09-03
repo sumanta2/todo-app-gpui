@@ -296,6 +296,23 @@ impl NotesApp {
             .gap(px(6.0))
             .child(
                 div()
+                    .id("bold-btn")
+                    .px(px(7.0))
+                    .py(px(2.0))
+                    .bg(rgb(0x2d2d2d))
+                    .hover(|s| s.bg(rgb(0x3d3d3d)))
+                    .rounded(px(4.0))
+                    .cursor_pointer()
+                    .text_size(px(11.0))
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .text_color(rgb(0xffffff))
+                    .on_click(cx.listener(|this, _, _, cx| {
+                        this.toggle_bold(cx);
+                    }))
+                    .child("B"),
+            )
+            .child(
+                div()
                     .id("save-btn")
                     .px(px(5.0))
                     .py(px(2.0))

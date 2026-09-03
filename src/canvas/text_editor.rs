@@ -7,6 +7,7 @@ use std::ops::Range;
 #[allow(dead_code)]
 pub struct TextEditor {
     pub text: String,
+    pub bold_flags: Vec<bool>,
     pub cursor: usize,
     pub anchor: Option<usize>,
     pub focus_handle: FocusHandle,
@@ -19,6 +20,7 @@ impl TextEditor {
     pub fn new(text: String, cx: &mut Context<impl Focusable>) -> Self {
         let cursor = text.chars().count();
         Self {
+            bold_flags: vec![false; cursor],
             text,
             cursor,
             anchor: None,
@@ -322,6 +324,17 @@ impl TextEditor {
             let line_start = global_offset;
             let line_end = global_offset + line_len;
 
+            let line_bold_flags = if line_start < self.bold_flags.len() {
+                let end = line_end.min(self.bold_flags.len());
+                let mut f = self.bold_flags[line_start..end].to_vec();
+                if f.len() < line_len {
+                    f.resize(line_len, false);
+                }
+                f
+            } else {
+                vec![false; line_len]
+            };
+
             let mut row = div()
                 .relative()
                 .flex()
@@ -350,8 +363,37 @@ impl TextEditor {
                         let before_prefix: String = line_chars[..loc_start].iter().collect();
                         let sel_content: String = line_chars[loc_start..loc_end].iter().collect();
 
-                        let before_disp = before_prefix.replace(' ', "\u{00A0}");
-                        let sel_disp = sel_content.replace(' ', "\u{00A0}");
+                        let before_flags = &line_bold_flags[..loc_start.min(line_bold_flags.len())];
+                        let before_runs = crate::helpers::split_text_into_styled_runs(&before_prefix, before_flags);
+                        let mut before_ghosts = Vec::new();
+                        for run in &before_runs {
+                            let disp = run.text.replace(' ', "\u{00A0}");
+                            let el = div()
+                                .text_color(rgba(0x00000000))
+                                .font_weight(if run.is_bold {
+                                    gpui::FontWeight::BOLD
+                                } else {
+                                    gpui::FontWeight::NORMAL
+                                })
+                                .child(disp);
+                            before_ghosts.push(el.into_any_element());
+                        }
+
+                        let sel_flags = &line_bold_flags[loc_start.min(line_bold_flags.len())..loc_end.min(line_bold_flags.len())];
+                        let sel_runs = crate::helpers::split_text_into_styled_runs(&sel_content, sel_flags);
+                        let mut sel_ghosts = Vec::new();
+                        for run in &sel_runs {
+                            let disp = run.text.replace(' ', "\u{00A0}");
+                            let el = div()
+                                .text_color(rgba(0x00000000))
+                                .font_weight(if run.is_bold {
+                                    gpui::FontWeight::BOLD
+                                } else {
+                                    gpui::FontWeight::NORMAL
+                                })
+                                .child(disp);
+                            sel_ghosts.push(el.into_any_element());
+                        }
 
                         row = row.child(
                             div()
@@ -361,11 +403,7 @@ impl TextEditor {
                                 .flex()
                                 .flex_row()
                                 .items_center()
-                                .child(
-                                    div()
-                                        .text_color(rgba(0x00000000))
-                                        .child(before_disp),
-                                )
+                                .children(before_ghosts)
                                 .child(
                                     div()
                                         .bg(rgb(0x0078d4))
@@ -373,11 +411,7 @@ impl TextEditor {
                                         .h(px(18.0))
                                         .flex()
                                         .items_center()
-                                        .child(
-                                            div()
-                                                .text_color(rgba(0x00000000))
-                                                .child(sel_disp),
-                                        ),
+                                        .children(sel_ghosts),
                                 ),
                         );
                     } else if line_len == 0 && sel.start <= line_start && sel.end > line_start {
@@ -395,17 +429,41 @@ impl TextEditor {
                 }
             }
 
-            // Always render full line text as a single contiguous, solid text element
-            let line_display = if line.is_empty() {
-                "\u{00A0}".to_string()
+            // Render line text as styled runs with bold support
+            let runs = crate::helpers::split_text_into_styled_runs(line, &line_bold_flags);
+            let mut line_elements = Vec::new();
+            if runs.is_empty() {
+                line_elements.push(
+                    div()
+                        .text_color(rgb(0xd4d4d4))
+                        .child("\u{00A0}")
+                        .into_any_element(),
+                );
             } else {
-                line.replace(' ', "\u{00A0}")
-            };
+                for run in &runs {
+                    let disp = run.text.replace(' ', "\u{00A0}");
+                    let el = div()
+                        .text_color(if run.is_bold {
+                            rgb(0xffffff)
+                        } else {
+                            rgb(0xd4d4d4)
+                        })
+                        .font_weight(if run.is_bold {
+                            gpui::FontWeight::BOLD
+                        } else {
+                            gpui::FontWeight::NORMAL
+                        })
+                        .child(disp);
+                    line_elements.push(el.into_any_element());
+                }
+            }
 
             row = row.child(
                 div()
-                    .text_color(rgb(0xd4d4d4))
-                    .child(line_display),
+                    .flex()
+                    .flex_row()
+                    .items_center()
+                    .children(line_elements),
             );
 
             // If focused and cursor is in this line, render cursor overlay
@@ -419,7 +477,22 @@ impl TextEditor {
                 let local_cursor = cursor_idx.saturating_sub(line_start).min(line_len);
                 let line_chars: Vec<char> = line.chars().collect();
                 let before_prefix: String = line_chars[..local_cursor].iter().collect();
-                let before_disp = before_prefix.replace(' ', "\u{00A0}");
+                let before_flags = &line_bold_flags[..local_cursor.min(line_bold_flags.len())];
+                let prefix_runs = crate::helpers::split_text_into_styled_runs(&before_prefix, before_flags);
+
+                let mut ghost_elements = Vec::new();
+                for run in &prefix_runs {
+                    let disp = run.text.replace(' ', "\u{00A0}");
+                    let el = div()
+                        .text_color(rgba(0x00000000))
+                        .font_weight(if run.is_bold {
+                            gpui::FontWeight::BOLD
+                        } else {
+                            gpui::FontWeight::NORMAL
+                        })
+                        .child(disp);
+                    ghost_elements.push(el.into_any_element());
+                }
 
                 row = row.child(
                     div()
@@ -429,11 +502,7 @@ impl TextEditor {
                         .flex()
                         .flex_row()
                         .items_center()
-                        .child(
-                            div()
-                                .text_color(rgba(0x00000000))
-                                .child(before_disp),
-                        )
+                        .children(ghost_elements)
                         .child(
                             div()
                                 .w(px(2.0))

@@ -235,10 +235,12 @@ impl NotesApp {
                                     y: click_y,
                                     text: String::new(),
                                     width: Some(250.0),
+                                    bold_spans: Vec::new(),
                                 };
                                 this.edit_canvas_items.push(CanvasItem::Text(new_text_item));
                                 this.active_text_block_id = Some(new_id);
                                 this.edit_body = String::new();
+                                this.edit_body_bold = Vec::new();
                                 this.edit_body_cursor = 0;
                                 this.edit_body_anchor = None;
                                 this.active_field = ActiveField::Body;
@@ -264,7 +266,7 @@ impl NotesApp {
                     .left(px(12.0))
                     .text_size(px(11.0))
                     .text_color(rgb(0x606060))
-                    .child("💡 Click canvas to type | Drag headers to move | Ctrl+V to paste | Drag background to pan"),
+                    .child("💡 Click canvas to type | Ctrl+B to bold | Drag headers to move | Ctrl+V to paste | Drag background to pan"),
             )
             .children(canvas_elements);
 

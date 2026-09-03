@@ -63,6 +63,8 @@ pub(crate) struct TextItem {
     pub(crate) y: f32,
     pub(crate) text: String,
     pub(crate) width: Option<f32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) bold_spans: Vec<(usize, usize)>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
@@ -88,6 +90,7 @@ pub(crate) fn load_canvas_items(body: &str) -> Vec<CanvasItem> {
                 y: 20.0,
                 text: body.to_string(),
                 width: Some(500.0),
+                bold_spans: Vec::new(),
             })]
         }
     }

@@ -1,8 +1,9 @@
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, MouseButton, Window};
 
 use crate::app::NotesApp;
+use crate::constants::{layout::NOTE_ITEM_TEXT_OFFSET_X, typography::WEIGHT_SEMIBOLD};
 use crate::models::ActiveField;
-use crate::text_selection::{calculate_line_text_offset, get_selection_range};
+use crate::text_selection::{calculate_line_text_offset_weighted, get_selection_range};
 
 impl NotesApp {
     /// Renders the left sidebar containing note navigation and note-creation actions.
@@ -123,11 +124,12 @@ impl NotesApp {
                                         .items_start()
                                         .child(
                                             div()
-                                                .text_size(px(14.0))
+                                                .text_size(px(self.note_heading_font_size))
                                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                                 .text_color(rgb(0xe0e0e0))
                                                 .child(if self.is_editing && is_selected {
                                                     let is_focused = is_note_heading_focused;
+                                                    let font_size = self.note_heading_font_size;
                                                     let editor = if self.edit_note_heading.is_empty() {
                                                         div()
                                                             .id("note-heading-placeholder")
@@ -159,7 +161,7 @@ impl NotesApp {
                                                                     .left(px(0.0))
                                                                     .top(px(2.0))
                                                                     .w(px(1.5))
-                                                                    .h(px(14.0))
+                                                                    .h(px(font_size))
                                                                     .bg(if self.cursor_visible {
                                                                         rgb(0x0078d4)
                                                                     } else {
@@ -201,7 +203,7 @@ impl NotesApp {
                                                                         div()
                                                                             .bg(rgb(0x264f78))
                                                                             .rounded(px(2.0))
-                                                                            .h(px(16.0))
+                                                                            .h(px(font_size + 2.0))
                                                                             .flex()
                                                                             .items_center()
                                                                             .child(
@@ -239,7 +241,7 @@ impl NotesApp {
                                                                     .child(
                                                                         div()
                                                                             .w(px(1.5))
-                                                                            .h(px(14.0))
+                                                                            .h(px(font_size))
                                                                             .bg(if self.cursor_visible {
                                                                                 rgb(0x0078d4)
                                                                             } else {
@@ -263,8 +265,13 @@ impl NotesApp {
                                                                     this.active_field =
                                                                         ActiveField::NoteHeading;
                                                                     this.focus_handle.focus(window, cx);
-                                                                    let rel_x = (event.position.x.as_f32() - 16.0).max(0.0);
-                                                                    let click_idx = calculate_line_text_offset(rel_x, &this.edit_note_heading, 13.0);
+                                                                    let rel_x = (event.position.x.as_f32() - NOTE_ITEM_TEXT_OFFSET_X).max(0.0);
+                                                                    let click_idx = calculate_line_text_offset_weighted(
+                                                                        rel_x,
+                                                                        &this.edit_note_heading,
+                                                                        this.note_heading_font_size,
+                                                                        WEIGHT_SEMIBOLD,
+                                                                    );
                                                                     this.edit_note_heading_cursor = click_idx;
                                                                     this.edit_note_heading_anchor = Some(click_idx);
                                                                     this.is_selecting_note_heading = true;
@@ -275,8 +282,13 @@ impl NotesApp {
                                                             )
                                                             .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
                                                                 if this.is_selecting_note_heading {
-                                                                    let rel_x = (event.position.x.as_f32() - 16.0).max(0.0);
-                                                                    let drag_idx = calculate_line_text_offset(rel_x, &this.edit_note_heading, 13.0);
+                                                                    let rel_x = (event.position.x.as_f32() - NOTE_ITEM_TEXT_OFFSET_X).max(0.0);
+                                                                    let drag_idx = calculate_line_text_offset_weighted(
+                                                                        rel_x,
+                                                                        &this.edit_note_heading,
+                                                                        this.note_heading_font_size,
+                                                                        WEIGHT_SEMIBOLD,
+                                                                    );
                                                                     this.edit_note_heading_cursor = drag_idx;
                                                                     cx.notify();
                                                                     cx.stop_propagation();

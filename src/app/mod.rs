@@ -70,6 +70,7 @@ pub struct NotesApp {
     pub(crate) edit_section_name_cursor: usize,
     pub(crate) edit_section_name_anchor: Option<usize>,
     pub(crate) is_selecting_section_name: bool,
+    pub(crate) active_section_tab_x: f32,
 
     // Sidebar State
     pub(crate) is_sidebar_open: bool,
@@ -85,6 +86,11 @@ pub struct NotesApp {
 
     // Cursor Blink State
     pub(crate) cursor_visible: bool,
+
+    // Standardized Typography Configuration
+    pub(crate) note_heading_font_size: f32,
+    pub(crate) section_name_font_size: f32,
+    pub(crate) page_heading_font_size: f32,
 }
 
 impl Focusable for NotesApp {

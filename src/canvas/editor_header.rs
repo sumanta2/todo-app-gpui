@@ -1,9 +1,13 @@
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, MouseButton};
 
 use crate::app::NotesApp;
+use crate::constants::{
+    layout::HEADING_PADDING_LEFT,
+    typography::{WEIGHT_BOLD, WEIGHT_NORMAL},
+};
 use crate::helpers::hash_str;
 use crate::models::{ActiveField, NoteContent};
-use crate::text_selection::calculate_line_text_offset;
+use crate::text_selection::{calculate_line_text_offset_weighted, calculate_text_width};
 
 impl NotesApp {
     /// Renders the section-name input inline in the active tab.
@@ -11,6 +15,7 @@ impl NotesApp {
     /// When the field is empty, it shows a placeholder; when it has focus, it draws the
     /// live cursor and selection highlight to match the editing experience used elsewhere.
     fn build_section_name_editor(&self, is_focused: bool, cx: &mut Context<Self>) -> AnyElement {
+        let font_size = self.section_name_font_size;
         if self.edit_section_name.is_empty() {
             div()
                 .id("section-name-placeholder")
@@ -32,7 +37,7 @@ impl NotesApp {
                 )
                 .child(
                     div()
-                        .text_size(px(11.0))
+                        .text_size(px(font_size))
                         .font_weight(gpui::FontWeight::BOLD)
                         .text_color(rgb(0x808080))
                         .child("Section Name..."),
@@ -43,7 +48,7 @@ impl NotesApp {
                         .left(px(0.0))
                         .top(px(1.0))
                         .w(px(1.5))
-                        .h(px(12.0))
+                        .h(px(font_size + 1.0))
                         .bg(if self.cursor_visible {
                             rgb(0x0078d4)
                         } else {
@@ -85,7 +90,7 @@ impl NotesApp {
                         .items_center()
                         .child(
                             div()
-                                .text_size(px(11.0))
+                                .text_size(px(font_size))
                                 .font_weight(gpui::FontWeight::BOLD)
                                 .text_color(rgba(0x00000000))
                                 .child(before_disp),
@@ -94,12 +99,12 @@ impl NotesApp {
                             div()
                                 .bg(rgb(0x004c87))
                                 .rounded(px(2.0))
-                                .h(px(14.0))
+                                .h(px(font_size + 3.0))
                                 .flex()
                                 .items_center()
                                 .child(
                                     div()
-                                        .text_size(px(11.0))
+                                        .text_size(px(font_size))
                                         .font_weight(gpui::FontWeight::BOLD)
                                         .text_color(rgba(0x00000000))
                                         .child(sel_disp),
@@ -111,7 +116,7 @@ impl NotesApp {
 
             els.push(
                 div()
-                    .text_size(px(11.0))
+                    .text_size(px(font_size))
                     .font_weight(gpui::FontWeight::BOLD)
                     .text_color(rgb(0xffffff))
                     .child(if text.is_empty() {
@@ -135,7 +140,7 @@ impl NotesApp {
                         .items_center()
                         .child(
                             div()
-                                .text_size(px(11.0))
+                                .text_size(px(font_size))
                                 .font_weight(gpui::FontWeight::BOLD)
                                 .text_color(rgba(0x00000000))
                                 .child(before_disp),
@@ -143,7 +148,7 @@ impl NotesApp {
                         .child(
                             div()
                                 .w(px(1.5))
-                                .h(px(12.0))
+                                .h(px(font_size + 1.0))
                                 .bg(if self.cursor_visible {
                                     rgb(0x0078d4)
                                 } else {
@@ -166,10 +171,13 @@ impl NotesApp {
                     cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
                         this.active_field = ActiveField::SectionName;
                         this.focus_handle.focus(window, cx);
-                        let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
-                        let rel_x = (event.position.x.as_f32() - sidebar_w - 20.0).max(0.0);
-                        let click_idx =
-                            calculate_line_text_offset(rel_x, &this.edit_section_name, 11.0);
+                        let rel_x = (event.position.x.as_f32() - this.active_section_tab_x).max(0.0);
+                        let click_idx = calculate_line_text_offset_weighted(
+                            rel_x,
+                            &this.edit_section_name,
+                            this.section_name_font_size,
+                            WEIGHT_BOLD,
+                        );
                         this.edit_section_name_cursor = click_idx;
                         this.edit_section_name_anchor = Some(click_idx);
                         this.is_selecting_section_name = true;
@@ -180,10 +188,13 @@ impl NotesApp {
                 )
                 .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
                     if this.is_selecting_section_name {
-                        let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
-                        let rel_x = (event.position.x.as_f32() - sidebar_w - 20.0).max(0.0);
-                        let drag_idx =
-                            calculate_line_text_offset(rel_x, &this.edit_section_name, 11.0);
+                        let rel_x = (event.position.x.as_f32() - this.active_section_tab_x).max(0.0);
+                        let drag_idx = calculate_line_text_offset_weighted(
+                            rel_x,
+                            &this.edit_section_name,
+                            this.section_name_font_size,
+                            WEIGHT_BOLD,
+                        );
                         this.edit_section_name_cursor = drag_idx;
                         cx.notify();
                         cx.stop_propagation();
@@ -218,18 +229,25 @@ impl NotesApp {
         is_section_name_focused: bool,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
+        let mut current_tab_x = if self.is_sidebar_open { 220.0 } else { 44.0 };
+        let mut active_tab_x = current_tab_x + 6.0;
         let mut tabs = Vec::new();
+
         for sec in &content.sections {
             let sec_id = sec.id.clone();
             let is_active = Some(&sec_id) == self.active_section_id.as_ref();
             let click_id = sec_id.clone();
             let delete_id = sec_id.clone();
 
+            if is_active {
+                active_tab_x = current_tab_x + 6.0;
+            }
+
             let mut tab_el = div()
                 .id(("sec-tab", hash_str(&sec_id)))
                 .px(px(6.0))
                 .py(px(2.0))
-                .text_size(px(11.0))
+                .text_size(px(self.section_name_font_size))
                 .bg(if is_active {
                     rgb(0x1e1e1e)
                 } else {
@@ -278,14 +296,30 @@ impl NotesApp {
             }
 
             tabs.push(tab_el.into_any_element());
+
+            // Track horizontal offset for following tabs
+            let tab_text = if is_active {
+                if self.edit_section_name.is_empty() { "Section Name..." } else { &self.edit_section_name }
+            } else {
+                &sec.name
+            };
+            let weight = if is_active { WEIGHT_BOLD } else { WEIGHT_NORMAL };
+            let text_w = calculate_text_width(tab_text, self.section_name_font_size, weight);
+            let mut tab_w = 12.0 + text_w;
+            if content.sections.len() > 1 {
+                tab_w += 18.0;
+            }
+            current_tab_x += tab_w + 4.0;
         }
+
+        self.active_section_tab_x = active_tab_x;
 
         tabs.push(
             div()
                 .id("add-section-btn")
                 .px(px(6.0))
                 .py(px(2.0))
-                .text_size(px(11.0))
+                .text_size(px(self.section_name_font_size))
                 .bg(rgb(0x252525))
                 .hover(|s| s.bg(rgb(0x353535)))
                 .text_color(rgb(0x0078d4))
@@ -367,6 +401,7 @@ impl NotesApp {
         is_heading_focused: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
+        let font_size = self.page_heading_font_size;
         if self.edit_heading.is_empty() {
             div()
                 .id("heading-placeholder")
@@ -388,7 +423,7 @@ impl NotesApp {
                 )
                 .child(
                     div()
-                        .text_size(px(20.0))
+                        .text_size(px(font_size))
                         .text_color(rgb(0x808080))
                         .child("Heading..."),
                 )
@@ -398,7 +433,7 @@ impl NotesApp {
                         .left(px(0.0))
                         .top(px(2.0))
                         .w(px(2.0))
-                        .h(px(20.0))
+                        .h(px(font_size))
                         .bg(if self.cursor_visible {
                             rgb(0x0078d4)
                         } else {
@@ -440,7 +475,7 @@ impl NotesApp {
                         .items_center()
                         .child(
                             div()
-                                .text_size(px(20.0))
+                                .text_size(px(font_size))
                                 .text_color(rgba(0x00000000))
                                 .child(before_disp),
                         )
@@ -448,12 +483,12 @@ impl NotesApp {
                             div()
                                 .bg(rgb(0x004c87))
                                 .rounded(px(2.0))
-                                .h(px(22.0))
+                                .h(px(font_size + 2.0))
                                 .flex()
                                 .items_center()
                                 .child(
                                     div()
-                                        .text_size(px(20.0))
+                                        .text_size(px(font_size))
                                         .text_color(rgba(0x00000000))
                                         .child(sel_disp),
                                 ),
@@ -464,7 +499,7 @@ impl NotesApp {
 
             elements.push(
                 div()
-                    .text_size(px(20.0))
+                    .text_size(px(font_size))
                     .text_color(rgb(0xffffff))
                     .child(if text.is_empty() {
                         "\u{00A0}".to_string()
@@ -487,14 +522,14 @@ impl NotesApp {
                         .items_center()
                         .child(
                             div()
-                                .text_size(px(20.0))
+                                .text_size(px(font_size))
                                 .text_color(rgba(0x00000000))
                                 .child(before_disp),
                         )
                         .child(
                             div()
                                 .w(px(2.0))
-                                .h(px(20.0))
+                                .h(px(font_size))
                                 .bg(if self.cursor_visible {
                                     rgb(0x0078d4)
                                 } else {
@@ -518,8 +553,13 @@ impl NotesApp {
                         this.active_field = ActiveField::Heading;
                         this.focus_handle.focus(window, cx);
                         let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
-                        let rel_x = (event.position.x.as_f32() - sidebar_w - 10.0).max(0.0);
-                        let click_idx = calculate_line_text_offset(rel_x, &this.edit_heading, 20.0);
+                        let rel_x = (event.position.x.as_f32() - sidebar_w - HEADING_PADDING_LEFT).max(0.0);
+                        let click_idx = calculate_line_text_offset_weighted(
+                            rel_x,
+                            &this.edit_heading,
+                            this.page_heading_font_size,
+                            WEIGHT_NORMAL,
+                        );
                         this.edit_heading_cursor = click_idx;
                         this.edit_heading_anchor = Some(click_idx);
                         this.is_selecting_heading = true;
@@ -531,8 +571,13 @@ impl NotesApp {
                 .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
                     if this.is_selecting_heading {
                         let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
-                        let rel_x = (event.position.x.as_f32() - sidebar_w - 10.0).max(0.0);
-                        let drag_idx = calculate_line_text_offset(rel_x, &this.edit_heading, 20.0);
+                        let rel_x = (event.position.x.as_f32() - sidebar_w - HEADING_PADDING_LEFT).max(0.0);
+                        let drag_idx = calculate_line_text_offset_weighted(
+                            rel_x,
+                            &this.edit_heading,
+                            this.page_heading_font_size,
+                            WEIGHT_NORMAL,
+                        );
                         this.edit_heading_cursor = drag_idx;
                         cx.notify();
                         cx.stop_propagation();

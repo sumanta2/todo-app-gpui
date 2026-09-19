@@ -60,6 +60,7 @@ impl NotesApp {
             edit_section_name_cursor: 0,
             edit_section_name_anchor: None,
             is_selecting_section_name: false,
+            active_section_tab_x: 0.0,
             is_sidebar_open: false,
             viewer_active_text_block_id: None,
             viewer_text_cursor: 0,
@@ -67,6 +68,9 @@ impl NotesApp {
             is_selecting_viewer_text: false,
             window_w: 800.0,
             cursor_visible: true,
+            note_heading_font_size: crate::constants::typography::NOTE_HEADING_FONT_SIZE,
+            section_name_font_size: crate::constants::typography::SECTION_NAME_FONT_SIZE,
+            page_heading_font_size: crate::constants::typography::PAGE_HEADING_FONT_SIZE,
         };
 
         // Keep the Cursor blinking by toggling visibility every 500 ms and re-rendering.
@@ -572,4 +576,23 @@ impl NotesApp {
         self.sync_active_text_block();
         cx.notify();
     }
+
+    /// Updates the font size used for the notebook name in the sidebar.
+    #[allow(dead_code)]
+    pub(crate) fn set_note_heading_font_size(&mut self, size: f32) {
+        self.note_heading_font_size = size;
+    }
+
+    /// Updates the font size used for section tabs.
+    #[allow(dead_code)]
+    pub(crate) fn set_section_name_font_size(&mut self, size: f32) {
+        self.section_name_font_size = size;
+    }
+
+    /// Updates the font size used for page headings.
+    #[allow(dead_code)]
+    pub(crate) fn set_page_heading_font_size(&mut self, size: f32) {
+        self.page_heading_font_size = size;
+    }
 }
+

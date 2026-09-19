@@ -1,8 +1,12 @@
 use gpui::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButton, Window};
 
 use crate::app::NotesApp;
+use crate::constants::{
+    layout::HEADING_PADDING_LEFT,
+    typography::{WEIGHT_BOLD, WEIGHT_NORMAL},
+};
 use crate::models::{ActiveField, CanvasItem, Note, NoteContent, TextItem};
-use crate::text_selection::{calculate_canvas_drag_offset, calculate_line_text_offset};
+use crate::text_selection::{calculate_canvas_drag_offset, calculate_line_text_offset_weighted};
 
 impl NotesApp {
     /// Renders the editable note canvas and its surrounding controls.
@@ -148,14 +152,23 @@ impl NotesApp {
                     }
                 } else if this.is_selecting_heading {
                     let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
-                    let rel_x = (event.position.x.as_f32() - sidebar_w - 10.0).max(0.0);
-                    let drag_idx = calculate_line_text_offset(rel_x, &this.edit_heading, 20.0);
+                    let rel_x = (event.position.x.as_f32() - sidebar_w - HEADING_PADDING_LEFT).max(0.0);
+                    let drag_idx = calculate_line_text_offset_weighted(
+                        rel_x,
+                        &this.edit_heading,
+                        this.page_heading_font_size,
+                        WEIGHT_NORMAL,
+                    );
                     this.edit_heading_cursor = drag_idx;
                     changed = true;
                 } else if this.is_selecting_section_name {
-                    let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
-                    let rel_x = (event.position.x.as_f32() - sidebar_w - 20.0).max(0.0);
-                    let drag_idx = calculate_line_text_offset(rel_x, &this.edit_section_name, 11.0);
+                    let rel_x = (event.position.x.as_f32() - this.active_section_tab_x).max(0.0);
+                    let drag_idx = calculate_line_text_offset_weighted(
+                        rel_x,
+                        &this.edit_section_name,
+                        this.section_name_font_size,
+                        WEIGHT_BOLD,
+                    );
                     this.edit_section_name_cursor = drag_idx;
                     changed = true;
                 } else if this.is_panning {

@@ -62,10 +62,51 @@ pub(crate) fn get_char_width(ch: char, font_size: f32) -> f32 {
     base * (font_size / 12.0)
 }
 
-/// Maps an x-position inside a single line back to the nearest character index.
-pub(crate) fn calculate_line_text_offset(rel_x: f32, text: &str, font_size: f32) -> usize {
-    calculate_line_text_offset_with_bold(rel_x, text, None, font_size)
+/// Measures the estimated rendered width of a string at a specific font size and weight multiplier.
+pub(crate) fn calculate_text_width(text: &str, font_size: f32, weight_multiplier: f32) -> f32 {
+    let mut width = 0.0f32;
+    for ch in text.chars() {
+        width += get_char_width(ch, font_size) * weight_multiplier;
+    }
+    width
 }
+
+/// Maps an x-position inside a single line back to the nearest character index.
+#[allow(dead_code)]
+pub(crate) fn calculate_line_text_offset(rel_x: f32, text: &str, font_size: f32) -> usize {
+    calculate_line_text_offset_weighted(rel_x, text, font_size, 1.0)
+}
+
+/// Maps a click position inside a line to the closest character index with a uniform weight multiplier.
+pub(crate) fn calculate_line_text_offset_weighted(
+    rel_x: f32,
+    text: &str,
+    font_size: f32,
+    weight_multiplier: f32,
+) -> usize {
+    let char_count = text.chars().count();
+    if text.is_empty() || char_count == 0 || rel_x <= 0.0 {
+        return 0;
+    }
+
+    let mut current_x = 0.0f32;
+
+    for (idx, ch) in text.chars().enumerate() {
+        let w = get_char_width(ch, font_size) * weight_multiplier;
+        let midpoint = current_x + (w / 2.0);
+        let end_x = current_x + w;
+
+        if rel_x < midpoint {
+            return idx;
+        } else if rel_x < end_x {
+            return idx + 1;
+        }
+        current_x = end_x;
+    }
+
+    char_count
+}
+
 
 /// Maps a click position inside a bold-aware text line to the closest character index.
 pub(crate) fn calculate_line_text_offset_with_bold(
@@ -429,3 +470,36 @@ pub(crate) fn move_cursor_word_right(text: &str, cursor: usize) -> usize {
     }
     pos
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calculate_line_text_offset_scales_with_font_size() {
+        let text = "Hello World";
+        // At 14px, clicking at x = 0 should be index 0
+        assert_eq!(calculate_line_text_offset_weighted(0.0, text, 14.0, 1.0), 0);
+
+        // At 14px vs 28px, the same character should be at double the x offset
+        let w_14 = calculate_text_width("Hello", 14.0, 1.0);
+        let w_28 = calculate_text_width("Hello", 28.0, 1.0);
+        assert!((w_28 - w_14 * 2.0).abs() < 0.001);
+
+        // Clicking right after "Hello" should return 5 for both font sizes
+        assert_eq!(calculate_line_text_offset_weighted(w_14, text, 14.0, 1.0), 5);
+        assert_eq!(calculate_line_text_offset_weighted(w_28, text, 28.0, 1.0), 5);
+    }
+
+    #[test]
+    fn test_calculate_line_text_offset_with_weight() {
+        let text = "Section Title";
+        let w_normal = calculate_text_width(text, 11.0, 1.00);
+        let w_bold = calculate_text_width(text, 11.0, 1.10);
+        assert!(w_bold > w_normal);
+
+        // Clicking beyond the end returns full length
+        assert_eq!(calculate_line_text_offset_weighted(999.0, text, 11.0, 1.10), text.len());
+    }
+}
+

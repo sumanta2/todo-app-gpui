@@ -2,6 +2,7 @@
 
 mod app;
 mod canvas;
+mod constants;
 mod helpers;
 mod models;
 mod text_selection;

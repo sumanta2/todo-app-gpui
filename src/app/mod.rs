@@ -6,6 +6,11 @@ use gpui::{App, FocusHandle, Focusable};
 
 use crate::models::{ActiveField, CanvasItem, Note, NoteContent};
 
+/// Root application state for the notes workspace.
+///
+/// This struct keeps all note data, the active editing state, and the canvas-level
+/// interaction state in one place so the UI can read and update the current document
+/// consistently from a single source of truth.
 pub struct NotesApp {
     pub(crate) notes: Vec<Note>,
     pub(crate) selected_note_id: Option<String>,
@@ -83,6 +88,10 @@ pub struct NotesApp {
 }
 
 impl Focusable for NotesApp {
+    /// Returns the app-wide keyboard focus handle used by GPUI widgets.
+    ///
+    /// This lets the sidebar, canvas, and text editors share the same focus scope so
+    /// key events are routed to the currently active field.
     fn focus_handle(&self, _cx: &App) -> FocusHandle {
         self.focus_handle.clone()
     }

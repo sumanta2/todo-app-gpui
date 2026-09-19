@@ -1,3 +1,4 @@
+/// Converts a cursor/anchor pair into the normalized start-end selection range.
 pub(crate) fn get_selection_range(cursor: usize, anchor: Option<usize>) -> Option<(usize, usize)> {
     if let Some(anchor) = anchor {
         if anchor != cursor {
@@ -7,6 +8,10 @@ pub(crate) fn get_selection_range(cursor: usize, anchor: Option<usize>) -> Optio
     None
 }
 
+/// Estimates the rendered width of a character at a given font size.
+///
+/// This is used by the editor and canvas selection logic to map pointer positions back to
+/// character indices with a simple approximation model.
 pub(crate) fn get_char_width(ch: char, font_size: f32) -> f32 {
     let base = match ch {
         // Very narrow characters (~3.15px - 3.25px)
@@ -57,10 +62,12 @@ pub(crate) fn get_char_width(ch: char, font_size: f32) -> f32 {
     base * (font_size / 12.0)
 }
 
+/// Maps an x-position inside a single line back to the nearest character index.
 pub(crate) fn calculate_line_text_offset(rel_x: f32, text: &str, font_size: f32) -> usize {
     calculate_line_text_offset_with_bold(rel_x, text, None, font_size)
 }
 
+/// Maps a click position inside a bold-aware text line to the closest character index.
 pub(crate) fn calculate_line_text_offset_with_bold(
     rel_x: f32,
     text: &str,
@@ -94,6 +101,7 @@ pub(crate) fn calculate_line_text_offset_with_bold(
     char_count
 }
 
+/// Computes the character index for a click inside a canvas text block.
 pub(crate) fn calculate_canvas_text_offset(
     mouse_pos: gpui::Point<gpui::Pixels>,
     sidebar_open: bool,
@@ -120,6 +128,7 @@ pub(crate) fn calculate_canvas_text_offset(
     )
 }
 
+/// Computes a canvas character offset when the text block includes a header offset.
 #[allow(dead_code)]
 pub(crate) fn calculate_canvas_text_offset_with_header(
     mouse_pos: gpui::Point<gpui::Pixels>,
@@ -149,6 +158,7 @@ pub(crate) fn calculate_canvas_text_offset_with_header(
     )
 }
 
+/// Computes the canvas cursor offset using an explicit width and header padding model.
 pub(crate) fn calculate_canvas_text_offset_with_header_and_width(
     mouse_pos: gpui::Point<gpui::Pixels>,
     sidebar_open: bool,
@@ -178,6 +188,7 @@ pub(crate) fn calculate_canvas_text_offset_with_header_and_width(
     )
 }
 
+/// Computes a canvas character offset while respecting bold formatting metadata.
 pub(crate) fn calculate_canvas_text_offset_with_header_and_bold(
     mouse_pos: gpui::Point<gpui::Pixels>,
     sidebar_open: bool,
@@ -233,6 +244,7 @@ pub(crate) fn calculate_canvas_text_offset_with_header_and_bold(
     (line_start_global + local_char_offset).min(total_char_count)
 }
 
+/// Calculates the drag target character index for a canvas text selection gesture.
 pub(crate) fn calculate_canvas_drag_offset(
     mouse_pos: gpui::Point<gpui::Pixels>,
     sidebar_open: bool,
@@ -260,6 +272,7 @@ pub(crate) fn calculate_canvas_drag_offset(
     )
 }
 
+/// Calculates a drag offset for a canvas text box that has explicit header offsets.
 #[allow(dead_code)]
 pub(crate) fn calculate_canvas_drag_offset_with_header(
     mouse_pos: gpui::Point<gpui::Pixels>,
@@ -292,6 +305,7 @@ pub(crate) fn calculate_canvas_drag_offset_with_header(
     )
 }
 
+/// Calculates a drag offset while accounting for bold span metadata.
 pub(crate) fn calculate_canvas_drag_offset_with_bold(
     mouse_pos: gpui::Point<gpui::Pixels>,
     sidebar_open: bool,
@@ -323,6 +337,7 @@ pub(crate) fn calculate_canvas_drag_offset_with_bold(
     )
 }
 
+/// Moves a cursor upward by one visual line while keeping the same column whenever possible.
 pub(crate) fn move_cursor_up(text: &str, cursor: usize) -> usize {
     let lines: Vec<&str> = text.split('\n').collect();
     let mut current_offset = 0;
@@ -352,6 +367,7 @@ pub(crate) fn move_cursor_up(text: &str, cursor: usize) -> usize {
     }
 }
 
+/// Moves a cursor downward by one visual line while keeping the same column whenever possible.
 pub(crate) fn move_cursor_down(text: &str, cursor: usize) -> usize {
     let lines: Vec<&str> = text.split('\n').collect();
     let mut current_offset = 0;
@@ -381,6 +397,7 @@ pub(crate) fn move_cursor_down(text: &str, cursor: usize) -> usize {
     }
 }
 
+/// Moves the cursor to the previous word boundary in the text value.
 pub(crate) fn move_cursor_word_left(text: &str, cursor: usize) -> usize {
     if cursor == 0 {
         return 0;
@@ -396,6 +413,7 @@ pub(crate) fn move_cursor_word_left(text: &str, cursor: usize) -> usize {
     pos
 }
 
+/// Moves the cursor to the next word boundary in the text value.
 pub(crate) fn move_cursor_word_right(text: &str, cursor: usize) -> usize {
     let chars: Vec<char> = text.chars().collect();
     let len = chars.len();

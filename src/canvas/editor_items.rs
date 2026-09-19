@@ -8,6 +8,10 @@ use crate::text_selection::{
 };
 
 impl NotesApp {
+    /// Renders all editable canvas blocks such as text boxes and images.
+    ///
+    /// Each item receives drag/resize handlers, delete controls, and the active text editing
+    /// behavior when it is selected as the currently focused body block.
     pub(crate) fn render_canvas_elements(
         &mut self,
         is_body_focused: bool,
@@ -116,7 +120,8 @@ impl NotesApp {
                                             this.edit_canvas_items.retain(|item| match item {
                                                 CanvasItem::Text(tx) => tx.id != delete_id,
                                                 _ => true,
-                                            });                                            if this.active_text_block_id == Some(delete_id.clone())
+                                            });
+                                            if this.active_text_block_id == Some(delete_id.clone())
                                             {
                                                 this.active_text_block_id = None;
                                                 this.edit_body = String::new();

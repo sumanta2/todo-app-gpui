@@ -5,6 +5,10 @@ use crate::models::{ActiveField, CanvasItem, Note, NoteContent, TextItem};
 use crate::text_selection::{calculate_canvas_drag_offset, calculate_line_text_offset};
 
 impl NotesApp {
+    /// Renders the editable note canvas and its surrounding controls.
+    ///
+    /// This function assembles the section tabs, the editable heading, the canvas body, and
+    /// the page sidebar into one notebook editor surface.
     pub(crate) fn render_canvas_editor(
         &mut self,
         _note: &Note,

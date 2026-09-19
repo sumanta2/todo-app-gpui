@@ -5,6 +5,10 @@ use crate::models::ActiveField;
 use crate::text_selection::{calculate_line_text_offset, get_selection_range};
 
 impl NotesApp {
+    /// Renders the left sidebar containing note navigation and note-creation actions.
+    ///
+    /// The sidebar keeps the list of notes and the current notebook title editor in sync with
+    /// the app state while allowing the user to switch between notes quickly.
     pub(crate) fn render_sidebar(
         &mut self,
         window: &mut Window,

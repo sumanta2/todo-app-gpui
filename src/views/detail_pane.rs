@@ -5,35 +5,41 @@ use crate::helpers::hash_str;
 use crate::models::load_note_content;
 
 impl NotesApp {
+    /// Renders the main detail pane for the selected note.
+    ///
+    /// Depending on whether the note is in edit mode, this either shows the editable canvas or
+    /// the read-only viewer, along with the page sidebar for navigation.
     pub(crate) fn render_detail_pane(
         &mut self,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let selected_note = self
+        let selected_note: Option<crate::models::Note> = self
             .notes
             .iter()
             .find(|n| Some(n.id.clone()) == self.selected_note_id)
             .cloned();
 
         if let Some(note) = selected_note {
-            let content = if self.is_editing {
+            let content: crate::models::NoteContent = if self.is_editing {
                 self.edit_content
                     .clone()
                     .unwrap_or_else(|| load_note_content(&note.body, &note.images))
             } else {
+                // C:\Users\gorai\OneDrive\Desktop\todo-app-gpui\NotesModelToCanvusModelParsing.md follow this doc to understood the pursing from json to notes
                 load_note_content(&note.body, &note.images)
             };
 
-            // Vertical Page sidebar (on the right)
+            // ===============================================================================================================
+            // Vertical Page sidebar showing all page list (on the right) ====================================================
             let page_sidebar = {
                 let active_sec = content
                     .sections
                     .iter()
-                    .find(|s| Some(&s.id) == self.active_section_id.as_ref());
-                let pages = active_sec.map(|s| &s.pages).cloned().unwrap_or_default();
+                    .find(|s: &&crate::models::NoteSection| Some(&s.id) == self.active_section_id.as_ref());
+                let pages: Vec<crate::models::NotePage> = active_sec.map(|s: &crate::models::NoteSection| &s.pages).cloned().unwrap_or_default();
 
-                let mut page_elements = Vec::new();
+                let mut page_elements: Vec<AnyElement> = Vec::new();
                 for page in &pages {
                     let page_id = page.id.clone();
                     let is_active = Some(&page_id) == self.active_page_id.as_ref();
@@ -84,9 +90,9 @@ impl NotesApp {
                             div()
                                 .id(("delete-page", hash_str(&page_id)))
                                 .text_color(rgb(0xff6b6b))
-                                .hover(|s| s.text_color(rgb(0xff0000)))
+                                .hover(|s: gpui::StyleRefinement| s.text_color(rgb(0xff0000)))
                                 .child("×")
-                                .on_click(cx.listener(move |this, _, _, cx| {
+                                .on_click(cx.listener(move |this: &mut NotesApp, _, _, cx: &mut Context<'_, NotesApp>| {
                                     this.delete_page(delete_id.clone(), cx);
                                     cx.stop_propagation();
                                 })),
@@ -149,6 +155,8 @@ impl NotesApp {
                     )
             };
 
+            // ====================================================================================================================
+            // show the Canvas section where notes and image will show and user use to create different notes  ====================
             if self.is_editing {
                 self.render_canvas_editor(
                     &note,

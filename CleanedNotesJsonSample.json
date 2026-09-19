@@ -1,0 +1,157 @@
+
+{
+    "metadata": {
+        "description": "Using this format we storing notes data at an json file",
+        "content_type": "notes",
+        "version": 1
+    },
+"notes":
+
+[
+    {
+        "id": "1784484680064",
+        "heading": "TestingNotes Only",
+        "body": {
+            "sections": [
+                {
+                    "id": "default-section",
+                    "name": "Bug Fixes Data",
+                    "pages": [
+                        {
+                            "id": "default-page",
+                            "name": "AB# 328719",
+                            "body": [
+                                {
+                                    "type": "Text",
+                                    "id": "1784486189041",
+                                    "x": 9.0,
+                                    "y": 58.800003,
+                                    "text": "Hello How are You, can you do this?\ntoday i need to complete this task, anyhow i need to complete this thing, otherwise it will cause ",
+                                    "width": 706.0,
+                                    "bold_spans": [
+                                        [
+                                            68,
+                                            99
+                                        ]
+                                    ]
+                                },
+                                {
+                                    "type": "Image",
+                                    "id": "1784486313374",
+                                    "x": 11.999985,
+                                    "y": 127.000015,
+                                    "path": "C:\\Users\\gorai\\AppData\\Roaming\\todo-app-gpui\\images\\1784484680064_1784486313354.bmp",
+                                    "width": 490.0,
+                                    "height": 361.0
+                                },
+                                {
+                                    "type": "Text",
+                                    "id": "1784703986237",
+                                    "x": 20.800018,
+                                    "y": 575.0,
+                                    "text": "Today I need to fix this Bug as much as possible Otherwise it will create Issue. DetailsAadapter GotOrderProperty coming NUll, need to fix those correct way,\nhghhgy",
+                                    "width": 1119.0
+                                }
+                            ],
+                            "images": [
+                                "C:\\Users\\gorai\\AppData\\Roaming\\todo-app-gpui\\images\\1784484680064_1784486313354.bmp"
+                            ]
+                        },
+                        {
+                            "id": "1784565379953",
+                            "name": "Page 2",
+                            "body": [
+                                {
+                                    "type": "Text",
+                                    "id": "text-1785088612949",
+                                    "x": -654,
+                                    "y": -988,
+                                    "text": "",
+                                    "width": 320
+                                },
+                                {
+                                    "type": "Text",
+                                    "id": "text-1785088618126",
+                                    "x": -660,
+                                    "y": -850,
+                                    "text": "",
+                                    "width": 320
+                                },
+                                {
+                                    "type": "Text",
+                                    "id": "text-1785088652557",
+                                    "x": 54,
+                                    "y": -75,
+                                    "text": "",
+                                    "width": 320
+                                },
+                                {
+                                    "type": "Text",
+                                    "id": "text-1785088657968",
+                                    "x": 78,
+                                    "y": 273,
+                                    "text": "",
+                                    "width": 569
+                                }
+                            ],
+                            "images": []
+                        }
+                    ]
+                }
+            ]
+        },
+        "created_at": "Jul 19, 2026 11:41 PM",
+        "images": [
+            "C:\\Users\\gorai\\AppData\\Roaming\\todo-app-gpui\\images\\1784484680064_1784486313354.bmp"
+        ],
+        "links": null,
+        "format": null
+    },
+    {
+        "id": "1784485491402",
+        "heading": "TestSection",
+        "body": {
+            "sections": [
+                {
+                    "id": "default-section",
+                    "name": "TestSection1",
+                    "pages": [
+                        {
+                            "id": "default-page",
+                            "name": "Page 1",
+                            "body": [
+                                {
+                                    "type": "Text",
+                                    "id": "1787378447305",
+                                    "x": 18.399994,
+                                    "y": 44.0,
+                                    "text": "oday i need to complete this task, anyhow i need to complete thi",
+                                    "width": 354.00003
+                                }
+                            ],
+                            "images": []
+                        }
+                    ]
+                },
+                {
+                    "id": "1784516030997",
+                    "name": "TestSection2",
+                    "pages": [
+                        {
+                            "id": "1784516030997_page",
+                            "name": "Page 1",
+                            "body": [],
+                            "images": []
+                        }
+                    ]
+                }
+            ]
+        },
+        "created_at": "Jul 19, 2026 11:54 PM",
+        "images": [],
+        "links": null,
+        "format": null
+    }
+]
+
+}

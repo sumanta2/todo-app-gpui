@@ -6,7 +6,22 @@ use crate::app::NotesApp;
 use crate::helpers::encrypt_decrypt;
 use crate::models::{CanvasItem, ImageItem, Note};
 
+/// Persistent storage helpers for the app's notes and image files.
+///
+/// The application keeps all user data under a single app-specific folder:
+/// - Windows: `%APPDATA%/todo-app-gpui/notes.json`  or C:\Users\gorai\AppData\Roaming\todo-app-gpui\notes.json
+/// - Unix-like systems: `$HOME/todo-app-gpui/notes.json`
+///
+/// Notes are stored as a JSON file, while attached images are saved as separate files in
+/// a sibling `images` folder. The image bytes are encrypted before being written to disk,
+/// and decrypted again when they are loaded back into the editor.
 impl NotesApp {
+    /// Builds the location of the app's JSON storage file in the user data directory.
+    ///
+    /// The function tries to place data in the OS user data area, preferring the platform
+    /// standard directory (`APPDATA` on Windows, then `HOME`/`USERPROFILE` on Unix-like
+    /// systems). If no environment variable is available, it falls back to the current working
+    /// directory and still keeps the same folder layout.
     pub(crate) fn get_storage_path() -> PathBuf {
         let mut path = if let Ok(appdata) = std::env::var("APPDATA") {
             PathBuf::from(appdata)
@@ -22,6 +37,11 @@ impl NotesApp {
         path
     }
 
+    /// Loads the full note list from disk.
+    ///
+    /// This reads the JSON file created by `save_notes()` and converts it back into a
+    /// `Vec<Note>`. If the file does not exist or the content is invalid JSON, the function
+    /// returns `None` so the app can continue with an empty/default state.
     pub(crate) fn load_notes() -> Option<Vec<Note>> {
         let path = Self::get_storage_path();
         if path.exists() {
@@ -32,6 +52,10 @@ impl NotesApp {
         }
     }
 
+    /// Saves the current in-memory notes to the storage file.
+    ///
+    /// The data is written as pretty-printed JSON so it remains human-readable and easy to
+    /// inspect manually if needed. The parent directory is created automatically before writing.
     pub(crate) fn save_notes(&self) {
         let path = Self::get_storage_path();
         if let Some(parent) = path.parent() {
@@ -42,6 +66,14 @@ impl NotesApp {
         }
     }
 
+    /// Attaches an image to the currently selected note and persists it to disk.
+    ///
+    /// The function:
+    /// 1. determines the file extension from the image format,
+    /// 2. creates the app-level `images` folder beside `notes.json`,
+    /// 3. writes the image under a unique filename based on the note ID and timestamp,
+    /// 4. encrypts the raw bytes before storing them,
+    /// 5. pushes a corresponding `ImageItem` into the canvas state so it can be rendered later.
     pub(crate) fn attach_image_to_note(&mut self, img: &gpui::Image, cx: &mut Context<Self>) {
         if let Some(ref selected_id) = self.selected_note_id {
             let ext = match img.format {
@@ -59,7 +91,8 @@ impl NotesApp {
             let filename = format!("{}_{}.{}", selected_id, timestamp, ext);
             path.push(filename);
 
-            // Scramble bytes using XOR cipher before writing to disk
+            // Scramble bytes using XOR cipher before writing to disk.
+            // The selected note ID is part of the key so each note has its own encryption scope.
             let key = format!("notes-security-key-{}", selected_id).into_bytes();
             let encrypted_bytes = encrypt_decrypt(&img.bytes, &key);
 
@@ -76,7 +109,7 @@ impl NotesApp {
                     };
                     self.edit_canvas_items
                         .push(CanvasItem::Image(new_image_item));
-                    // Keep self.edit_images in sync as well
+                    // Keep self.edit_images in sync as well.
                     self.edit_images.push(path_str.to_owned());
                     cx.notify();
                 }
@@ -84,6 +117,12 @@ impl NotesApp {
         }
     }
 
+    /// Loads an image from disk and decrypts it back into a `gpui::Image`.
+    ///
+    /// The function reads the file from the stored path, uses the same note-based key to
+    /// decrypt the bytes, infers the image format from the extension, and creates a valid
+    /// image object for the editor. Returns `None` if the file cannot be read or if the
+    /// selected note ID is not available.
     pub(crate) fn decrypt_image(&self, path_str: &str) -> Option<gpui::Image> {
         let path = PathBuf::from(path_str);
         if let Some(ref selected_id) = self.selected_note_id {

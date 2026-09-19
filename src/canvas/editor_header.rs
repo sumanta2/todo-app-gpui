@@ -6,6 +6,10 @@ use crate::models::{ActiveField, NoteContent};
 use crate::text_selection::calculate_line_text_offset;
 
 impl NotesApp {
+    /// Renders the section-name input inline in the active tab.
+    ///
+    /// When the field is empty, it shows a placeholder; when it has focus, it draws the
+    /// live cursor and selection highlight to match the editing experience used elsewhere.
     fn build_section_name_editor(&self, is_focused: bool, cx: &mut Context<Self>) -> AnyElement {
         if self.edit_section_name.is_empty() {
             div()
@@ -204,6 +208,10 @@ impl NotesApp {
         }
     }
 
+    /// Builds the horizontal section tab strip and editing action buttons.
+    ///
+    /// Each tab represents a section of the note, while the toolbar exposes actions such as
+    /// bold formatting, save, and cancel for the current edit session.
     pub(crate) fn build_section_tabs(
         &mut self,
         content: &NoteContent,
@@ -353,6 +361,7 @@ impl NotesApp {
             .child(right_side)
     }
 
+    /// Renders the page heading field used to title the currently selected note page.
     pub(crate) fn build_heading_editor(
         &self,
         is_heading_focused: bool,

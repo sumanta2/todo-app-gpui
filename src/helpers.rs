@@ -1,3 +1,4 @@
+/// Creates a stable hash for a string so UI elements can use a deterministic ID.
 pub(crate) fn hash_str(s: &str) -> usize {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
@@ -6,6 +7,7 @@ pub(crate) fn hash_str(s: &str) -> usize {
     hasher.finish() as usize
 }
 
+/// Replaces a character range within a string while preserving UTF-8 character boundaries.
 pub(crate) fn replace_range(s: &mut String, start: usize, end: usize, replace_with: &str) {
     let mut chars: Vec<char> = s.chars().collect();
     if start <= end && end <= chars.len() {
@@ -17,6 +19,10 @@ pub(crate) fn replace_range(s: &mut String, start: usize, end: usize, replace_wi
     }
 }
 
+/// XOR-encrypts and decrypts byte slices using a repeating key.
+///
+/// The app uses this helper to store image data with a lightweight obfuscation layer
+/// before writing it to disk.
 pub(crate) fn encrypt_decrypt(bytes: &[u8], key: &[u8]) -> Vec<u8> {
     bytes
         .iter()
@@ -25,6 +31,7 @@ pub(crate) fn encrypt_decrypt(bytes: &[u8], key: &[u8]) -> Vec<u8> {
         .collect()
 }
 
+/// Converts bold ranges into a boolean flag array indexed by character position.
 pub(crate) fn spans_to_bool_vec(spans: &[(usize, usize)], len: usize) -> Vec<bool> {
     let mut flags = vec![false; len];
     for &(start, end) in spans {
@@ -35,6 +42,7 @@ pub(crate) fn spans_to_bool_vec(spans: &[(usize, usize)], len: usize) -> Vec<boo
     flags
 }
 
+/// Converts a bold-flag vector back into contiguous character ranges.
 pub(crate) fn bool_vec_to_spans(flags: &[bool]) -> Vec<(usize, usize)> {
     let mut spans = Vec::new();
     let mut in_span = false;
@@ -57,6 +65,7 @@ pub(crate) fn bool_vec_to_spans(flags: &[bool]) -> Vec<(usize, usize)> {
     spans
 }
 
+/// A run of text that keeps the same bold state within a single contiguous segment.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct StyledRun {
     pub(crate) text: String,
@@ -65,6 +74,7 @@ pub(crate) struct StyledRun {
     pub(crate) end: usize,
 }
 
+/// Splits a text string into segments whose bold state is consistent across each run.
 pub(crate) fn split_text_into_styled_runs(text: &str, flags: &[bool]) -> Vec<StyledRun> {
     let chars: Vec<char> = text.chars().collect();
     if chars.is_empty() {

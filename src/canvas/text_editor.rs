@@ -17,6 +17,7 @@ pub struct TextEditor {
 
 #[allow(dead_code)]
 impl TextEditor {
+    /// Creates a new editor wrapper around a text value and binds it to a GPUI focus handle.
     pub fn new(text: String, cx: &mut Context<impl Focusable>) -> Self {
         let cursor = text.chars().count();
         Self {
@@ -30,6 +31,7 @@ impl TextEditor {
         }
     }
 
+    /// Returns the current selection as a character range when the anchor and cursor differ.
     pub fn selection(&self) -> Option<Range<usize>> {
         if let Some(anchor) = self.anchor {
             if anchor != self.cursor {
@@ -41,6 +43,7 @@ impl TextEditor {
         None
     }
 
+    /// Extracts the currently selected text from the editor buffer if a selection exists.
     pub fn selected_text(&self) -> Option<String> {
         let range = self.selection()?;
         let chars: Vec<char> = self.text.chars().collect();
@@ -51,15 +54,18 @@ impl TextEditor {
         }
     }
 
+    /// Selects the entire text content from beginning to end of the current buffer.
     pub fn select_all(&mut self) {
         self.anchor = Some(0);
         self.cursor = self.text.chars().count();
     }
 
+    /// Clears the current selection anchor without moving the cursor.
     pub fn clear_selection(&mut self) {
         self.anchor = None;
     }
 
+    /// Inserts a string at the active cursor position, replacing the current selection if one exists.
     pub fn insert_str(&mut self, s: &str) {
         let chars: Vec<char> = self.text.chars().collect();
         let total_chars = chars.len();
@@ -81,6 +87,7 @@ impl TextEditor {
         self.anchor = None;
     }
 
+    /// Removes the selected content or the character immediately before the cursor.
     pub fn backspace(&mut self) {
         let chars: Vec<char> = self.text.chars().collect();
         let total_chars = chars.len();
@@ -102,6 +109,7 @@ impl TextEditor {
         }
     }
 
+    /// Deletes the selected content or the character directly after the cursor.
     pub fn delete_forward(&mut self) {
         let chars: Vec<char> = self.text.chars().collect();
         let total_chars = chars.len();
@@ -122,6 +130,7 @@ impl TextEditor {
         }
     }
 
+    /// Moves the cursor one character to the left and optionally extends the active selection.
     pub fn move_left(&mut self, extend_selection: bool) {
         if extend_selection {
             if self.anchor.is_none() {
@@ -140,6 +149,7 @@ impl TextEditor {
         }
     }
 
+    /// Moves the cursor one character to the right and optionally extends the active selection.
     pub fn move_right(&mut self, extend_selection: bool) {
         let total_chars = self.text.chars().count();
         if extend_selection {
@@ -159,6 +169,7 @@ impl TextEditor {
         }
     }
 
+    /// Moves the cursor to the previous visual line while preserving or extending the selection.
     pub fn move_up(&mut self, extend_selection: bool) {
         let next_pos = crate::text_selection::move_cursor_up(&self.text, self.cursor);
         if extend_selection {
@@ -171,6 +182,7 @@ impl TextEditor {
         self.cursor = next_pos;
     }
 
+    /// Moves the cursor to the next visual line while preserving or extending the selection.
     pub fn move_down(&mut self, extend_selection: bool) {
         let next_pos = crate::text_selection::move_cursor_down(&self.text, self.cursor);
         if extend_selection {
@@ -183,6 +195,7 @@ impl TextEditor {
         self.cursor = next_pos;
     }
 
+    /// Handles a key event, including clipboard shortcuts, cursor movement, and text insertion.
     pub fn handle_key<T: Focusable>(
         &mut self,
         event: &KeyDownEvent,
@@ -273,10 +286,12 @@ impl TextEditor {
         }
     }
 
+    /// Renders the editor in a compact line-oriented form for a focused or unfocused state.
     pub fn render_editor(&self, is_focused: bool) -> AnyElement {
         self.render_editor_with_line_wrapper(is_focused, |_, _, _, row| row.into_any_element())
     }
 
+    /// Renders the full text editor while allowing a caller to wrap each visual line.
     pub fn render_editor_with_line_wrapper<F>(
         &self,
         is_focused: bool,

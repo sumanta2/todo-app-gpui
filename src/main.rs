@@ -15,6 +15,10 @@ use gpui_platform::application;
 use crate::app::NotesApp;
 
 impl Render for NotesApp {
+    /// Builds the main application layout for the notes editor.
+    ///
+    /// The layout contains the left sidebar for note selection and the right detail pane
+    /// where note content, page management, and canvas editing are rendered.
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let sidebar = self.render_sidebar(window, cx);
         let detail_pane = self.render_detail_pane(window, cx);
@@ -36,6 +40,23 @@ impl Render for NotesApp {
     }
 }
 
+/// Application startup flow:
+///
+/// 1. `cx.new(NotesApp::new)` creates the app state and initializes persisted note data,
+///    active selection, focus handles, and editor-specific flags.
+/// 2. The `Render for NotesApp` implementation is responsible only for drawing the current
+///    UI from that in-memory state.
+/// 2.1. When in-memory state changes, we call `cx.notify()` or related update paths; GPUI then asks the
+///    app to render again using the latest values.
+///
+/// This separation keeps the app maintainable:
+/// - constructor / action methods = data setup and mutations
+/// - render = view composition from current state
+/// - no heavy state initialization should live inside the render function itself
+///
+/// The extra stack size is intentional because the UI logic is fairly rich and the
+/// editor/canvas rendering can recurse deeply enough to overflow the default thread stack
+/// on Windows.
 fn main() {
     // The render function is large; increase the main thread stack size to 64 MB
     // to avoid STATUS_STACK_OVERFLOW on Windows (default stack is only 1 MB).
@@ -54,7 +75,7 @@ fn main() {
                         ..Default::default()
                     },
                     |window, cx| {
-                        let app = cx.new(NotesApp::new);
+                        let app = cx.new(NotesApp::new); // calling NotesApp constructor present at action.rs
                         app.focus_handle(cx).focus(window, cx);
                         app
                     },

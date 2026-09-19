@@ -1,4 +1,6 @@
-use gpui::{div, img, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, MouseButton, Window};
+use gpui::{
+    div, img, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, MouseButton, Window,
+};
 use std::sync::Arc;
 
 use crate::app::NotesApp;
@@ -9,6 +11,10 @@ use crate::text_selection::{
 };
 
 impl NotesApp {
+    /// Renders the read-only canvas viewer for a note after editing is finished.
+    ///
+    /// This method paints the saved canvas text blocks and images exactly as they were last
+    /// serialized, while preserving the current viewer selection state.
     pub(crate) fn render_canvas_viewer(
         &mut self,
         _note: &Note,
@@ -19,7 +25,7 @@ impl NotesApp {
     ) -> impl IntoElement {
         let mut viewer_elements = Vec::new();
 
-        let active_page_items = {
+        let active_page_items: Vec<CanvasItem> = {
             let mut items = Vec::new();
             if let Some(ref sec_id) = self.active_section_id {
                 if let Some(section) = content.sections.iter().find(|s| s.id == *sec_id) {
@@ -35,6 +41,7 @@ impl NotesApp {
 
         for item in &active_page_items {
             match item {
+                //  RENDER CANVAS-ITEM TEXT FOR VIEW =========================================================================
                 CanvasItem::Text(t) => {
                     let t_id = t.id.clone();
                     let is_text_active = self.viewer_active_text_block_id.as_deref() == Some(&t_id);
@@ -93,7 +100,9 @@ impl NotesApp {
                             let sel_overlap_start = sel_start.max(line_global_start);
                             let sel_overlap_end = sel_end.min(line_global_end);
                             sel_overlap_start < sel_overlap_end
-                                || (line_len == 0 && sel_start <= line_global_start && sel_end > line_global_start)
+                                || (line_len == 0
+                                    && sel_start <= line_global_start
+                                    && sel_end > line_global_start)
                         } else {
                             false
                         };
@@ -111,12 +120,17 @@ impl NotesApp {
                                     .saturating_sub(line_global_start)
                                     .min(line_chars.len());
 
-                                let before_prefix: String = line_chars[..loc_start].iter().collect();
-                                let sel_content: String = line_chars[loc_start..loc_end].iter().collect();
+                                let before_prefix: String =
+                                    line_chars[..loc_start].iter().collect();
+                                let sel_content: String =
+                                    line_chars[loc_start..loc_end].iter().collect();
 
-                                let before_flags = &line_bold_flags[..loc_start.min(line_bold_flags.len())];
-                                let before_runs =
-                                    crate::helpers::split_text_into_styled_runs(&before_prefix, before_flags);
+                                let before_flags =
+                                    &line_bold_flags[..loc_start.min(line_bold_flags.len())];
+                                let before_runs = crate::helpers::split_text_into_styled_runs(
+                                    &before_prefix,
+                                    before_flags,
+                                );
                                 let mut before_ghosts = Vec::new();
                                 for run in &before_runs {
                                     let disp = run.text.replace(' ', "\u{00A0}");
@@ -131,10 +145,13 @@ impl NotesApp {
                                     before_ghosts.push(el.into_any_element());
                                 }
 
-                                let sel_flags = &line_bold_flags
-                                    [loc_start.min(line_bold_flags.len())..loc_end.min(line_bold_flags.len())];
-                                let sel_runs =
-                                    crate::helpers::split_text_into_styled_runs(&sel_content, sel_flags);
+                                let sel_flags = &line_bold_flags[loc_start
+                                    .min(line_bold_flags.len())
+                                    ..loc_end.min(line_bold_flags.len())];
+                                let sel_runs = crate::helpers::split_text_into_styled_runs(
+                                    &sel_content,
+                                    sel_flags,
+                                );
                                 let mut sel_ghosts = Vec::new();
                                 for run in &sel_runs {
                                     let disp = run.text.replace(' ', "\u{00A0}");
@@ -186,7 +203,8 @@ impl NotesApp {
                         }
 
                         // Render full line text as a solid contiguous styled element
-                        let runs = crate::helpers::split_text_into_styled_runs(line, &line_bold_flags);
+                        let runs =
+                            crate::helpers::split_text_into_styled_runs(line, &line_bold_flags);
                         let mut line_elements = Vec::new();
                         if runs.is_empty() {
                             line_elements.push(
@@ -233,8 +251,10 @@ impl NotesApp {
                             let before_prefix: String = line_chars[..local_cursor].iter().collect();
                             let before_flags =
                                 &line_bold_flags[..local_cursor.min(line_bold_flags.len())];
-                            let prefix_runs =
-                                crate::helpers::split_text_into_styled_runs(&before_prefix, before_flags);
+                            let prefix_runs = crate::helpers::split_text_into_styled_runs(
+                                &before_prefix,
+                                before_flags,
+                            );
 
                             let mut ghost_elements = Vec::new();
                             for run in &prefix_runs {
@@ -285,35 +305,40 @@ impl NotesApp {
                             .id(("viewer-line-row", hash_str(&t_id).wrapping_add(line_idx)))
                             .on_mouse_down(
                                 MouseButton::Left,
-                                cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
-                                    this.focus_handle.focus(window, cx);
-                                    this.is_panning = false;
-                                    this.pan_start_mouse = None;
-                                    this.pan_start_val = None;
-                                    this.viewer_active_text_block_id = Some(t_id_for_line.clone());
+                                cx.listener(
+                                    move |this, event: &gpui::MouseDownEvent, window, cx| {
+                                        this.focus_handle.focus(window, cx);
+                                        this.is_panning = false;
+                                        this.pan_start_mouse = None;
+                                        this.pan_start_val = None;
+                                        this.viewer_active_text_block_id =
+                                            Some(t_id_for_line.clone());
 
-                                    let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
-                                    let rel_x = (event.position.x.as_f32()
-                                        - sidebar_w
-                                        - this.pan_x
-                                        - item_x
-                                        - 5.0)
-                                        .max(0.0);
-                                    let local_idx =
+                                        let sidebar_w =
+                                            if this.is_sidebar_open { 220.0 } else { 44.0 };
+                                        let rel_x = (event.position.x.as_f32()
+                                            - sidebar_w
+                                            - this.pan_x
+                                            - item_x
+                                            - 5.0)
+                                            .max(0.0);
+                                        let local_idx =
                                         crate::text_selection::calculate_line_text_offset_with_bold(
                                             rel_x,
                                             &line_str_owned,
                                             Some(&line_flags_for_click),
                                             12.0,
                                         );
-                                    let click_idx = (line_global_start + local_idx).min(total_chars);
-                                    this.viewer_text_cursor = click_idx;
-                                    this.viewer_text_anchor = Some(click_idx);
-                                    this.is_selecting_viewer_text = true;
-                                    this.cursor_visible = true;
-                                    cx.notify();
-                                    cx.stop_propagation();
-                                }),
+                                        let click_idx =
+                                            (line_global_start + local_idx).min(total_chars);
+                                        this.viewer_text_cursor = click_idx;
+                                        this.viewer_text_anchor = Some(click_idx);
+                                        this.is_selecting_viewer_text = true;
+                                        this.cursor_visible = true;
+                                        cx.notify();
+                                        cx.stop_propagation();
+                                    },
+                                ),
                             );
 
                         line_rows.push(row.into_any_element());
@@ -413,6 +438,8 @@ impl NotesApp {
 
                     viewer_elements.push(text_el.into_any_element());
                 }
+
+                //  RENDER CANVAS-ITEM IMAGES FOR VIEW =========================================================================
                 CanvasItem::Image(img_item) => {
                     if let Some(img_data) = self.decrypt_image(&img_item.path) {
                         let source = gpui::ImageSource::Image(Arc::new(img_data));
@@ -538,7 +565,10 @@ impl NotesApp {
                                 let anchor =
                                     this.viewer_text_anchor.unwrap_or(this.viewer_text_cursor);
                                 let tx_total_chars = tx.text.chars().count();
-                                let bold_flags = crate::helpers::spans_to_bool_vec(&tx.bold_spans, tx_total_chars);
+                                let bold_flags = crate::helpers::spans_to_bool_vec(
+                                    &tx.bold_spans,
+                                    tx_total_chars,
+                                );
                                 let drag_idx = calculate_canvas_drag_offset_with_bold(
                                     event.position,
                                     this.is_sidebar_open,

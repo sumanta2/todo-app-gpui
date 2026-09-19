@@ -7,8 +7,15 @@ use crate::models::{
 };
 
 impl NotesApp {
+    /// Called by GPUI when the app window is created during startup in main().
+    ///
+    /// This constructor initializes the saved notes, picks the first note as the default
+    /// selection, and starts the cursor-blink timer used by the editor UI.
+    /// This constructor is called from the app startup in main.rs:66:NotesApp::new using this syntax
     pub(crate) fn new(cx: &mut Context<Self>) -> Self {
-        let notes = Self::load_notes().unwrap_or_default();
+
+        // this below "load_note" function present at src\app\storage.rs filed
+        let notes = Self::load_notes().unwrap_or_default();   
         let selected_note_id = notes.first().map(|n| n.id.clone());
 
         let mut app = Self {
@@ -62,6 +69,7 @@ impl NotesApp {
             cursor_visible: true,
         };
 
+        // Keep the Cursor blinking by toggling visibility every 500 ms and re-rendering.
         cx.spawn(|this: gpui::WeakEntity<Self>, cx: &mut gpui::AsyncApp| {
             let mut cx = cx.clone();
             async move {
@@ -87,11 +95,13 @@ impl NotesApp {
         app
     }
 
+    /// Toggles the collapsed/expanded state of the left sidebar and re-renders the UI.
     pub(crate) fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
         self.is_sidebar_open = !self.is_sidebar_open;
         cx.notify();
     }
 
+    /// Returns the currently selected note, if any.
     pub(crate) fn selected_note(&self) -> Option<&Note> {
         if let Some(ref id) = self.selected_note_id {
             self.notes.iter().find(|n| n.id == *id)
@@ -100,6 +110,10 @@ impl NotesApp {
         }
     }
 
+    /// Ensures the current active section and page still exist for the selected note.
+    ///
+    /// This keeps the UI focused on valid content even after a note is edited, loaded, or
+    /// switched to a different section/page.
     pub(crate) fn initialize_active_section_page(&mut self) {
         if let Some(ref id) = self.selected_note_id {
             if let Some(note) = self.notes.iter().find(|n| n.id == *id) {
@@ -146,6 +160,10 @@ impl NotesApp {
         }
     }
 
+    /// Writes the current in-memory page editor state back into the editable content model.
+    ///
+    /// This is used before switching content, saving, or leaving edit mode so the page's
+    /// section name, heading, and canvas bodies all stay in sync.
     pub(crate) fn sync_current_page_state(&mut self) {
         self.sync_active_text_block();
 
@@ -180,6 +198,10 @@ impl NotesApp {
         }
     }
 
+    /// Switches the active note to a specific page inside the current section.
+    ///
+    /// When the app is editing, the current page state is saved first and then the editor UI
+    /// is rehydrated from the chosen page.
     pub(crate) fn switch_to_page(
         &mut self,
         section_id: String,
@@ -228,6 +250,7 @@ impl NotesApp {
         cx.notify();
     }
 
+    /// Switches the current page selection to the first page in the given section.
     pub(crate) fn switch_to_section(&mut self, section_id: String, cx: &mut Context<Self>) {
         let content = if self.is_editing {
             self.edit_content.clone().unwrap_or_else(|| {
@@ -246,6 +269,7 @@ impl NotesApp {
         }
     }
 
+    /// Adds a new section to the currently edited note and immediately opens its first page.
     pub(crate) fn add_section(&mut self, cx: &mut Context<Self>) {
         if let Some(ref mut content) = self.edit_content {
             let new_sec_id = chrono::Local::now().timestamp_millis().to_string();
@@ -265,6 +289,7 @@ impl NotesApp {
         }
     }
 
+    /// Removes a section from the current editing content if more than one section remains.
     pub(crate) fn delete_section(&mut self, section_id: String, cx: &mut Context<Self>) {
         let mut should_switch = None;
         if let Some(ref mut content) = self.edit_content {
@@ -286,6 +311,7 @@ impl NotesApp {
         }
     }
 
+    /// Adds a new page to the active section and immediately switches to it.
     pub(crate) fn add_page(&mut self, cx: &mut Context<Self>) {
         if let Some(ref mut content) = self.edit_content {
             if let Some(ref sec_id) = self.active_section_id {
@@ -304,13 +330,14 @@ impl NotesApp {
         }
     }
 
+    /// Deletes a page from the active section while preserving the section when possible.
     pub(crate) fn delete_page(&mut self, page_id: String, cx: &mut Context<Self>) {
-        let mut should_switch = None;
+        let mut should_switch: Option<(String, String)> = None;
         if let Some(ref mut content) = self.edit_content {
             if let Some(ref sec_id) = self.active_section_id {
                 if let Some(section) = content.sections.iter_mut().find(|s| s.id == *sec_id) {
                     if section.pages.len() > 1 {
-                        section.pages.retain(|p| p.id != page_id);
+                        section.pages.retain(|p: &NotePage| p.id != page_id);
                         if self.active_page_id == Some(page_id) {
                             if let Some(first_page) = section.pages.first() {
                                 should_switch = Some((sec_id.clone(), first_page.id.clone()));
@@ -327,6 +354,7 @@ impl NotesApp {
         }
     }
 
+    /// Creates a new blank note, saves it immediately, and opens it in edit mode.
     pub(crate) fn create_note(&mut self, cx: &mut Context<Self>) {
         let id = chrono::Local::now().timestamp_millis().to_string();
         let created_at = chrono::Local::now()
@@ -348,6 +376,10 @@ impl NotesApp {
         cx.notify();
     }
 
+    /// Begins the notebook editor workflow for the selected note.
+    ///
+    /// The function clones the saved note content into the editable structure, loads the
+    /// active section/page state, and resets the input fields used by the editing UI.
     pub(crate) fn start_edit(&mut self, cx: &mut Context<Self>) {
         if let Some(ref selected_id) = self.selected_note_id {
             if let Some(note) = self.notes.iter().find(|n| n.id == *selected_id) {
@@ -409,6 +441,10 @@ impl NotesApp {
         }
     }
 
+    /// Copies the current body editor state into the active text block on the canvas.
+    ///
+    /// This keeps the text content and the canvas item model aligned whenever the user types,
+    /// edits the selection, or leaves a text block.
     pub(crate) fn sync_active_text_block(&mut self) {
         if self.active_field == ActiveField::Body {
             if let Some(ref active_id) = self.active_text_block_id {
@@ -449,6 +485,7 @@ impl NotesApp {
         }
     }
 
+    /// Persists the current note edit session back to the selected note object.
     pub(crate) fn save_edit(&mut self, cx: &mut Context<Self>) {
         self.sync_current_page_state();
 
@@ -481,11 +518,13 @@ impl NotesApp {
         }
     }
 
+    /// Exits edit mode without saving changes to the note payload.
     pub(crate) fn cancel_edit(&mut self, cx: &mut Context<Self>) {
         self.is_editing = false;
         cx.notify();
     }
 
+    /// Deletes a note from the in-memory list and saves the updated collection.
     pub(crate) fn delete_note(&mut self, id: String, cx: &mut Context<Self>) {
         self.notes.retain(|n| n.id != id);
         if self.selected_note_id == Some(id) {
@@ -496,6 +535,8 @@ impl NotesApp {
         cx.notify();
     }
 
+    /// Toggles bold formatting on the current selection or, if no selection exists, on the
+    /// active character.
     pub(crate) fn toggle_bold(&mut self, cx: &mut Context<Self>) {
         if self.active_field != ActiveField::Body {
             return;

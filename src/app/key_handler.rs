@@ -9,6 +9,11 @@ use crate::text_selection::{
 };
 
 impl NotesApp {
+    /// Handles the global key event route for the notes application.
+    ///
+    /// The function decides whether the event belongs to the notebook viewer, the note editor,
+    /// or the currently focused text field and then delegates the actual behavior to the
+    /// correct logic path.
     pub(crate) fn handle_key(&mut self, event: &gpui::KeyDownEvent, cx: &mut Context<Self>) {
         self.cursor_visible = true;
         let key = event.keystroke.key.as_str();

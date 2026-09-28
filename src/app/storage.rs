@@ -1,9 +1,12 @@
+//! `notes.json` persistence and the encrypted image files stored beside it.
+
 use gpui::Context;
 use std::fs;
 use std::path::PathBuf;
 
 use crate::app::NotesApp;
-use crate::helpers::{encrypt_decrypt, split_text_and_bold_at};
+use crate::helpers::encrypt_decrypt;
+use crate::text::styles::split_text_and_bold_at;
 use crate::models::{ActiveField, CanvasItem, ContentBlock, ImageItem, MixedItem, Note};
 
 /// Persistent storage helpers for the app's notes and image files.
@@ -148,10 +151,10 @@ impl NotesApp {
         if !before_text.is_empty() {
             replacement.push(ContentBlock::Text {
                 text: before_text,
-                bold_spans: crate::helpers::bool_vec_to_spans(&before_bold),
-                italic_spans: crate::helpers::bool_vec_to_spans(&before_italic),
-                underline_spans: crate::helpers::bool_vec_to_spans(&before_underline),
-                strike_spans: crate::helpers::bool_vec_to_spans(&before_strike),
+                bold_spans: crate::text::styles::bool_vec_to_spans(&before_bold),
+                italic_spans: crate::text::styles::bool_vec_to_spans(&before_italic),
+                underline_spans: crate::text::styles::bool_vec_to_spans(&before_underline),
+                strike_spans: crate::text::styles::bool_vec_to_spans(&before_strike),
             });
         }
         replacement.push(ContentBlock::Image {
@@ -162,10 +165,10 @@ impl NotesApp {
         let after_pos = replacement.len();
         replacement.push(ContentBlock::Text {
             text: after_text.clone(),
-            bold_spans: crate::helpers::bool_vec_to_spans(&after_bold),
-            italic_spans: crate::helpers::bool_vec_to_spans(&after_italic),
-            underline_spans: crate::helpers::bool_vec_to_spans(&after_underline),
-            strike_spans: crate::helpers::bool_vec_to_spans(&after_strike),
+            bold_spans: crate::text::styles::bool_vec_to_spans(&after_bold),
+            italic_spans: crate::text::styles::bool_vec_to_spans(&after_italic),
+            underline_spans: crate::text::styles::bool_vec_to_spans(&after_underline),
+            strike_spans: crate::text::styles::bool_vec_to_spans(&after_strike),
         });
 
         let Some(item) = self

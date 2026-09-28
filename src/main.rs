@@ -3,10 +3,9 @@
 mod app;
 mod canvas;
 mod constants;
-mod font_metrics;
 mod helpers;
 mod models;
-mod text_selection;
+mod text;
 mod views;
 
 use gpui::{
@@ -79,7 +78,7 @@ fn main() {
                         ..Default::default()
                     },
                     |window, cx| {
-                        let app = cx.new(NotesApp::new); // calling NotesApp constructor present at action.rs
+                        let app = cx.new(NotesApp::new); // calling NotesApp::new in app/editing.rs
                         app.focus_handle(cx).focus(window, cx);
                         app
                     },

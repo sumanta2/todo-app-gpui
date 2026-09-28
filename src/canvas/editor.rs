@@ -1,3 +1,5 @@
+//! Editable canvas shell: pan, drag, resize, and pointer routing.
+
 use gpui::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButton, Window};
 
 use crate::app::NotesApp;
@@ -8,7 +10,7 @@ use crate::constants::{
     typography::{HINT_FONT_SIZE, WEIGHT_BOLD, WEIGHT_NORMAL},
 };
 use crate::models::{ActiveField, CanvasItem, Note, NoteContent, TextItem};
-use crate::text_selection::{calculate_canvas_drag_offset_full, calculate_line_text_offset_with_font};
+use crate::text::selection::{calculate_canvas_drag_offset_full, calculate_line_text_offset_with_font};
 
 impl NotesApp {
     /// Renders the editable note canvas and its surrounding controls.

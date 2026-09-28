@@ -4,7 +4,7 @@ This note explains how the app converts a saved note body into canvas items, and
 
 ## 1) Top-level note structure
 
-The note model is defined in [src/models.rs](src/models.rs):
+The note model is defined in [src/models/mod.rs](src/models/mod.rs):
 
 ```rust
 pub(crate) struct Note {
@@ -26,7 +26,7 @@ The important part is that Note.body is a JSON String, not a direct in-memory ca
 
 ## 2) The note body is parsed as notebook content
 
-The helper `load_note_content` in [src/models.rs](src/models.rs) does this:
+The helper `load_note_content` in [src/models/mod.rs](src/models/mod.rs) does this:
 
 ```rust
 pub(crate) fn load_note_content(body: &str, legacy_images: &Option<Vec<String>>) -> NoteContent {
@@ -76,7 +76,7 @@ If the JSON is not in this form, the app falls back to a default section/page wr
 
 ## 3) Each page `body` is then parsed as canvas items
 
-The canvas layer uses this enum in [src/models.rs](src/models.rs):
+The canvas layer uses this enum in [src/models/canvas.rs](src/models/canvas.rs):
 
 ```rust
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
@@ -186,7 +186,7 @@ This is exactly what `serde_json` can deserialize into `Vec<CanvasItem>`.
 
 ### Load flow
 
-In [src/app/actions.rs](src/app/actions.rs):
+In [src/app/editing.rs](src/app/editing.rs):
 
 ```rust
 if let Some(page) = section.pages.iter().find(|p| p.id == page_id) {
@@ -199,7 +199,7 @@ This is the moment when the page JSON is converted to canvas items.
 
 ### Save flow
 
-Also in [src/app/actions.rs](src/app/actions.rs):
+Also in [src/app/editing.rs](src/app/editing.rs):
 
 ```rust
 self.edit_canvas_items.retain(|item| match item {
@@ -224,7 +224,7 @@ So the current canvas item array is serialized back to JSON and saved into `page
 
 ## 7) Why extra JSON fields are lost
 
-The app only knows how to deserialize into the types declared in [src/models.rs](src/models.rs):
+The app only knows how to deserialize into the types declared in [src/models/canvas.rs](src/models/canvas.rs):
 
 - `TextItem`
 - `ImageItem`
@@ -271,8 +271,9 @@ This is why the app can display canvas text and images cleanly, but only with da
 
 ## 9) Key files involved
 
-- [src/models.rs](src/models.rs)
-- [src/app/actions.rs](src/app/actions.rs)
+- [src/models/mod.rs](src/models/mod.rs)
+- [src/models/canvas.rs](src/models/canvas.rs)
+- [src/app/editing.rs](src/app/editing.rs)
 - [src/views/detail_pane.rs](src/views/detail_pane.rs)
 - [CleanedNotesJsonSample.json](CleanedNotesJsonSample.json)
 - [OriginalNotesJsonSample.json](OriginalNotesJsonSample.json)

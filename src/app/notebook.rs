@@ -1,0 +1,56 @@
+//! Create, select, and delete notebooks, and show or hide the sidebar.
+
+use gpui::Context;
+
+use crate::app::NotesApp;
+use crate::models::Note;
+
+impl NotesApp {
+    /// Toggles the collapsed/expanded state of the left sidebar and re-renders the UI.
+    pub(crate) fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
+        self.is_sidebar_open = !self.is_sidebar_open;
+        cx.notify();
+    }
+
+    /// Returns the currently selected note, if any.
+    pub(crate) fn selected_note(&self) -> Option<&Note> {
+        if let Some(ref id) = self.selected_note_id {
+            self.notes.iter().find(|n| n.id == *id)
+        } else {
+            None
+        }
+    }
+
+    /// Creates a new blank note, saves it immediately, and opens it in edit mode.
+    pub(crate) fn create_note(&mut self, cx: &mut Context<Self>) {
+        let id = chrono::Local::now().timestamp_millis().to_string();
+        let created_at = chrono::Local::now()
+            .format("%b %d, %Y %I:%M %p")
+            .to_string();
+        let new_note = Note {
+            id: id.clone(),
+            heading: "Untitled Note".to_owned(),
+            body: String::new(),
+            created_at,
+            images: None,
+            links: None,
+            format: None,
+        };
+        self.notes.push(new_note);
+        self.selected_note_id = Some(id);
+        self.save_notes();
+        self.start_edit(cx);
+        cx.notify();
+    }
+
+    /// Deletes a note from the in-memory list and saves the updated collection.
+    pub(crate) fn delete_note(&mut self, id: String, cx: &mut Context<Self>) {
+        self.notes.retain(|n| n.id != id);
+        if self.selected_note_id == Some(id) {
+            self.selected_note_id = None;
+            self.is_editing = false;
+        }
+        self.save_notes();
+        cx.notify();
+    }
+}

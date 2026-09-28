@@ -11,28 +11,39 @@ The codebase is organized into modular subdirectories to prevent single-file blo
 ```text
 todo-app-gpui/
 ├── .agents/
-│   └── AGENTS.md            # [This File] Agent rules & architecture guidelines
-├── Cargo.toml               # Package dependencies & build profiles
+│   └── AGENTS.md                 # [This File] Agent rules & architecture guidelines
+├── Cargo.toml                    # Package dependencies & build profiles
 ├── src/
-│   ├── main.rs              # Application entry point, window management, root App render
-│   ├── models.rs            # Plain Data Models (Note, NotePage, NoteSection, CanvasItem) & Serialization
-│   ├── helpers.rs           # Utilities: Hashing, encryption, range replacement
-│   ├── text_selection.rs    # Text selection, char width, hit testing & cursor navigation
-│   ├── app/                 # Application Controller & State Mutations
-│   │   ├── mod.rs           # NotesApp struct definition & Focusable implementation
-│   │   ├── storage.rs       # Persistence (notes.json), storage paths & image XOR encryption
-│   │   ├── actions.rs       # Notebook, section & page CRUD & edit state transitions
-│   │   └── key_handler.rs   # Keyboard shortcuts & text editing input handler
-│   ├── canvas/              # Interactive & Read-only Canvas Components
-│   │   ├── mod.rs           # Module exports for canvas view components
-│   │   ├── editor.rs        # Interactive canvas editor layout & event listeners
-│   │   ├── editor_items.rs  # Canvas text & image block rendering and controls
-│   │   ├── editor_header.rs # Section tabs toolbar & inline section/heading editors
-│   │   └── viewer.rs        # Read-only note display canvas
-│   └── views/               # Top-level UI View Components
-│       ├── mod.rs           # Module exports for main layout views
-│       ├── sidebar.rs       # View: Sidebar navigation & notebook list rendering
-│       └── detail_pane.rs   # View: Main detail view/editor layout rendering
+│   ├── main.rs                   # Window startup and the root layout (sidebar + detail pane)
+│   ├── constants.rs              # Colors, font sizes, and layout numbers
+│   ├── helpers.rs                # Stable ids, string edits, and image-byte XOR
+│   ├── models/                   # Saved data. No GPUI rendering here.
+│   │   ├── mod.rs                # Note, section, page, and which field has focus
+│   │   └── canvas.rs             # Text, image, and mixed blocks, plus load/save
+│   ├── text/                     # Pure text layout shared by every editor
+│   │   ├── metrics.rs            # Character width per font
+│   │   ├── selection.rs          # Hit testing, line width, and cursor movement
+│   │   └── styles.rs             # Bold, italic, underline, and strikethrough runs
+│   ├── app/                      # NotesApp state and the operations that change it
+│   │   ├── mod.rs                # NotesApp fields and focus handle
+│   │   ├── notebook.rs           # Create, select, and delete notebooks; sidebar
+│   │   ├── outline.rs            # Sections and pages inside the open notebook
+│   │   ├── editing.rs            # Open, sync, save, and cancel an editing session
+│   │   ├── formatting.rs         # Character styles and font settings
+│   │   ├── keyboard.rs           # Key routing into the active field
+│   │   └── storage.rs            # notes.json and encrypted image files
+│   ├── canvas/                   # The page surface
+│   │   ├── editor.rs             # Editable canvas shell: pan, drag, pointer routing
+│   │   ├── header.rs             # Section tabs and inline heading editors
+│   │   ├── blocks.rs             # Text, image, and mixed blocks on the editor
+│   │   ├── text_segment.rs       # One editable text segment
+│   │   ├── viewer.rs             # Read-only page canvas
+│   │   ├── viewer_text.rs        # Selection inside viewer text
+│   │   └── text_editor.rs        # Reusable styled text field
+│   └── views/                    # Top-level layout
+│       ├── sidebar.rs            # Notebook list
+│       ├── detail_pane.rs        # Page list plus editor or viewer
+│       └── ribbon.rs             # Home formatting commands
 ```
 
 ---
@@ -42,14 +53,15 @@ todo-app-gpui/
 When adding features or refactoring, apply the following design patterns:
 
 ### A. Strict Separation of Concerns (MVC-like)
-1. **Data Models (`src/models.rs`)**:
+1. **Data Models (`src/models/`)**:
    - Keep models pure. They should only contain data structures, `serde` serialization/deserialization traits, and constructor functions.
-   - **No GPUI rendering or context-bound logic** should exist in `models.rs`.
+   - Notebook shape lives in `src/models/mod.rs`. Canvas blocks live in `src/models/canvas.rs`.
+   - **No GPUI rendering or context-bound logic** should exist in `models`.
 2. **State & Mutation (`src/app/`)**:
    - `NotesApp` is the central state store defined in `src/app/mod.rs`.
-   - State-changing functions (e.g., adding a page, deleting a section, saving a note) are implemented in `src/app/actions.rs`.
-   - Persistence and image encryption/decryption are encapsulated in `src/app/storage.rs`.
-   - Keyboard events and input shortcuts are handled in `src/app/key_handler.rs`.
+   - Put each behavior in the module that already owns that job: `notebook`, `outline`, `editing`, `formatting`, `keyboard`, or `storage`.
+   - Persistence and image encryption/decryption stay in `src/app/storage.rs`.
+   - Keyboard events stay in `src/app/keyboard.rs`.
 3. **UI Views & Widgets (`src/canvas/`, `src/views/`)**:
    - Keep view logic organized inside dedicated domain subdirectories (`src/canvas/` for canvas widgets, `src/views/` for main layout views).
    - Keep rendering logic "thin." Do not perform complex calculations or state updates inside rendering loops. Delegate actions to state-mutation methods on `NotesApp` and notify GPUI to repaint via `cx.notify()`.
@@ -58,7 +70,7 @@ When adding features or refactoring, apply the following design patterns:
 * **Goal**: No single source file should exceed **800 lines** of code. Keep files preferably under **400 lines**.
 * **If a file exceeds 800 lines**:
   - Extract sub-components into new dedicated module files within the relevant subdirectory (e.g., `src/canvas/`, `src/app/`, or `src/views/`).
-  - Extract complex pure functions (like cryptography, string algorithms, or formatting) into `src/helpers.rs` or new utility sub-modules.
+  - Extract text layout into `src/text/`. Keep `src/helpers.rs` for ids, string edits, and image bytes only.
 
 ### C. Context Handling & Ownership in GPUI
 * GPUI relies on `AppContext` and `WindowContext` to track and trigger UI updates.
@@ -77,7 +89,7 @@ Follow this workflow whenever a user requests a new capability (e.g., "Add a tag
 
 ```mermaid
 graph TD
-    A[Identify Requirements] --> B[Step 1: Update models.rs]
+    A[Identify Requirements] --> B[Step 1: Update src/models/]
     B --> C[Step 2: Add Mutation Logic to src/app/]
     C --> D[Step 3: Create/Modify View Component in src/canvas/ or src/views/]
     D --> E[Step 4: Connect View in main.rs/detail_pane.rs]
@@ -85,12 +97,12 @@ graph TD
 ```
 
 ### Step 1: Model the Data
-* Open [models.rs](file:///c:/Users/gorai/OneDrive/Desktop/todo-app-gpui/src/models.rs).
+* Open [models/mod.rs](file:///c:/Users/gorai/OneDrive/Desktop/todo-app-gpui/src/models/mod.rs) for notebook fields, or [models/canvas.rs](file:///c:/Users/gorai/OneDrive/Desktop/todo-app-gpui/src/models/canvas.rs) for blocks on a page.
 * Declare new structs or update existing structures (e.g., `Note`, `NotePage`).
 * Add serialization tags if the new properties need to persist inside `notes.json`.
 
 ### Step 2: Implement State Mutation Logic
-* Open [actions.rs](file:///c:/Users/gorai/OneDrive/Desktop/todo-app-gpui/src/app/actions.rs) or appropriate file in `src/app/`.
+* Add the method to the `src/app/` module that already owns that job (`notebook`, `outline`, `editing`, `formatting`, `keyboard`, or `storage`).
 * Update `NotesApp` state methods to handle the new capability and call `cx.notify()` to alert GPUI.
 
 ### Step 3: Implement/Update the UI View

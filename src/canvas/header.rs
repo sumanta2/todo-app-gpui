@@ -1,3 +1,5 @@
+//! Section tabs and the inline editors for the notebook title, section name, and page heading.
+
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, MouseButton};
 
 use crate::app::NotesApp;
@@ -8,7 +10,7 @@ use crate::constants::{
 };
 use crate::helpers::hash_str;
 use crate::models::{ActiveField, NoteContent};
-use crate::text_selection::{calculate_line_text_offset_with_font, calculate_text_width_for_font};
+use crate::text::selection::{calculate_line_text_offset_with_font, calculate_text_width_for_font};
 
 impl NotesApp {
     /// Renders the section-name input inline in the active tab.

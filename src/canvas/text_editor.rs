@@ -1,3 +1,5 @@
+//! Reusable styled text field used by titles and other single-block editors.
+
 use gpui::{
     div, prelude::*, px, rgb, rgba, AnyElement, ClipboardItem, Context, FocusHandle, Focusable, KeyDownEvent,
 };
@@ -199,7 +201,7 @@ impl TextEditor {
 
     /// Moves the cursor to the previous visual line while preserving or extending the selection.
     pub fn move_up(&mut self, extend_selection: bool) {
-        let next_pos = crate::text_selection::move_cursor_up(&self.text, self.cursor);
+        let next_pos = crate::text::selection::move_cursor_up(&self.text, self.cursor);
         if extend_selection {
             if self.anchor.is_none() {
                 self.anchor = Some(self.cursor);
@@ -212,7 +214,7 @@ impl TextEditor {
 
     /// Moves the cursor to the next visual line while preserving or extending the selection.
     pub fn move_down(&mut self, extend_selection: bool) {
-        let next_pos = crate::text_selection::move_cursor_down(&self.text, self.cursor);
+        let next_pos = crate::text::selection::move_cursor_down(&self.text, self.cursor);
         if extend_selection {
             if self.anchor.is_none() {
                 self.anchor = Some(self.cursor);
@@ -413,7 +415,7 @@ impl TextEditor {
                         let sel_content: String = line_chars[loc_start..loc_end].iter().collect();
 
                         let before_flags = &line_bold_flags[..loc_start.min(line_bold_flags.len())];
-                        let before_runs = crate::helpers::split_text_into_styled_runs(&before_prefix, before_flags);
+                        let before_runs = crate::text::styles::split_text_into_styled_runs(&before_prefix, before_flags);
                         let mut before_ghosts = Vec::new();
                         for run in &before_runs {
                             let disp = run.text.replace(' ', "\u{00A0}");
@@ -430,7 +432,7 @@ impl TextEditor {
                         }
 
                         let sel_flags = &line_bold_flags[loc_start.min(line_bold_flags.len())..loc_end.min(line_bold_flags.len())];
-                        let sel_runs = crate::helpers::split_text_into_styled_runs(&sel_content, sel_flags);
+                        let sel_runs = crate::text::styles::split_text_into_styled_runs(&sel_content, sel_flags);
                         let mut sel_ghosts = Vec::new();
                         for run in &sel_runs {
                             let disp = run.text.replace(' ', "\u{00A0}");
@@ -480,13 +482,13 @@ impl TextEditor {
                 }
             }
 
-            let line_italic = crate::helpers::slice_flags(&self.italic_flags, line_start, line_end, line_len);
+            let line_italic = crate::text::styles::slice_flags(&self.italic_flags, line_start, line_end, line_len);
             let line_underline =
-                crate::helpers::slice_flags(&self.underline_flags, line_start, line_end, line_len);
-            let line_strike = crate::helpers::slice_flags(&self.strike_flags, line_start, line_end, line_len);
+                crate::text::styles::slice_flags(&self.underline_flags, line_start, line_end, line_len);
+            let line_strike = crate::text::styles::slice_flags(&self.strike_flags, line_start, line_end, line_len);
 
             // Render line text as styled runs (bold, italic, underline, strikethrough)
-            let runs = crate::helpers::split_text_into_full_runs(
+            let runs = crate::text::styles::split_text_into_full_runs(
                 line,
                 &line_bold_flags,
                 &line_italic,
@@ -530,7 +532,7 @@ impl TextEditor {
                 let before_prefix: String = line_chars[..local_cursor].iter().collect();
                 let before_flags = &line_bold_flags[..local_cursor.min(line_bold_flags.len())];
                 let before_italic = &line_italic[..local_cursor.min(line_italic.len())];
-                let prefix_runs = crate::helpers::split_text_into_full_runs(
+                let prefix_runs = crate::text::styles::split_text_into_full_runs(
                     &before_prefix,
                     before_flags,
                     before_italic,
@@ -582,7 +584,7 @@ impl TextEditor {
 
 /// Paints one styled text run. Decorations are skipped for invisible width-matching ghosts.
 pub(crate) fn styled_run_element(
-    run: &crate::helpers::StyledRun,
+    run: &crate::text::styles::StyledRun,
     font_size: f32,
     color: u32,
     decorations: bool,

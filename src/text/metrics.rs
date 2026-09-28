@@ -1,3 +1,5 @@
+//! Per-font character widths used by hit testing and cursor placement.
+
 use crate::constants::typography::FontType;
 
 /// Adjusts a generic weight multiplier (such as `WEIGHT_BOLD`) to how much wider heavier

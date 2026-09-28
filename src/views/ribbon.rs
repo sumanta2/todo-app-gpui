@@ -1,6 +1,8 @@
+//! Home ribbon for font, style, and formatting commands.
+
 use gpui::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButton};
 
-use crate::app::actions::TextStyleKind;
+use crate::app::formatting::TextStyleKind;
 use crate::app::NotesApp;
 use crate::constants::{
     colors::{TEXT_HINT, TEXT_PRIMARY, TEXT_SECONDARY},

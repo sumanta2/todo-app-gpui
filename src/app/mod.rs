@@ -1,5 +1,18 @@
-pub(crate) mod actions;
-pub(crate) mod key_handler;
+//! Application state and the operations that change it.
+//!
+//! `NotesApp` below is the single source of truth. Each child module owns one job:
+//! - `notebook` — create, select, and delete notebooks; sidebar visibility
+//! - `outline` — sections and pages inside the open notebook
+//! - `editing` — open, sync, save, and cancel an editing session
+//! - `formatting` — character styles and font settings
+//! - `keyboard` — key routing into the active field
+//! - `storage` — notes.json and image files
+
+pub(crate) mod editing;
+pub(crate) mod formatting;
+pub(crate) mod keyboard;
+pub(crate) mod notebook;
+pub(crate) mod outline;
 pub(crate) mod storage;
 
 use gpui::{App, FocusHandle, Focusable};

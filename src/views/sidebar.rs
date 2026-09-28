@@ -1,3 +1,5 @@
+//! Notebook list on the left.
+
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, MouseButton, Window};
 
 use crate::app::NotesApp;
@@ -7,7 +9,7 @@ use crate::constants::{
     typography::{META_FONT_SIZE, WEIGHT_SEMIBOLD},
 };
 use crate::models::ActiveField;
-use crate::text_selection::{calculate_line_text_offset_with_font, get_selection_range};
+use crate::text::selection::{calculate_line_text_offset_with_font, get_selection_range};
 
 impl NotesApp {
     /// Renders the left sidebar containing note navigation and note-creation actions.

@@ -1,3 +1,5 @@
+//! Main pane: page list, ribbon, and either the editor or the viewer.
+
 use gpui::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, Window};
 
 use crate::app::NotesApp;

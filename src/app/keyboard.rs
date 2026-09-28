@@ -1,9 +1,11 @@
+//! Routes keyboard input to the field that currently has focus.
+
 use gpui::Context;
 
 use crate::app::NotesApp;
 use crate::helpers::replace_range;
 use crate::models::{load_canvas_items, load_note_content, ActiveField, CanvasItem, TextItem};
-use crate::text_selection::{
+use crate::text::selection::{
     get_selection_range, move_cursor_down, move_cursor_up, move_cursor_word_left,
     move_cursor_word_right,
 };
@@ -28,19 +30,19 @@ impl NotesApp {
 
         // Shortcut: Ctrl + B / I / U, and Ctrl + Shift + X (strikethrough)
         if control && !shift && key.eq_ignore_ascii_case("b") {
-            self.toggle_text_style(crate::app::actions::TextStyleKind::Bold, cx);
+            self.toggle_text_style(crate::app::formatting::TextStyleKind::Bold, cx);
             return;
         }
         if control && !shift && key.eq_ignore_ascii_case("i") {
-            self.toggle_text_style(crate::app::actions::TextStyleKind::Italic, cx);
+            self.toggle_text_style(crate::app::formatting::TextStyleKind::Italic, cx);
             return;
         }
         if control && !shift && key.eq_ignore_ascii_case("u") {
-            self.toggle_text_style(crate::app::actions::TextStyleKind::Underline, cx);
+            self.toggle_text_style(crate::app::formatting::TextStyleKind::Underline, cx);
             return;
         }
         if control && shift && key.eq_ignore_ascii_case("x") {
-            self.toggle_text_style(crate::app::actions::TextStyleKind::Strike, cx);
+            self.toggle_text_style(crate::app::formatting::TextStyleKind::Strike, cx);
             return;
         }
 
@@ -399,7 +401,7 @@ impl NotesApp {
                     cx.write_to_clipboard(gpui::ClipboardItem::new_string(selected_chars));
                     replace_range(text, start, end, "");
                     if is_multiline {
-                        crate::helpers::drain_style_set([
+                        crate::text::styles::drain_style_set([
                             &mut self.edit_body_bold,
                             &mut self.edit_body_italic,
                             &mut self.edit_body_underline,
@@ -424,14 +426,14 @@ impl NotesApp {
                     if let Some((start, end)) = get_selection_range(*cursor, *anchor) {
                         replace_range(text, start, end, &cleaned_text);
                         if is_multiline {
-                        crate::helpers::drain_style_set([
+                        crate::text::styles::drain_style_set([
                             &mut self.edit_body_bold,
                             &mut self.edit_body_italic,
                             &mut self.edit_body_underline,
                             &mut self.edit_body_strike,
                         ], start, end);
                     }
-                        crate::helpers::insert_style_set(
+                        crate::text::styles::insert_style_set(
                             [
                                 &mut self.edit_body_bold,
                                 &mut self.edit_body_italic,
@@ -452,7 +454,7 @@ impl NotesApp {
                         }
                         *text = chars.into_iter().collect();
                         if is_multiline {
-                            crate::helpers::insert_style_set(
+                            crate::text::styles::insert_style_set(
                                 [
                             &mut self.edit_body_bold,
                             &mut self.edit_body_italic,
@@ -479,14 +481,14 @@ impl NotesApp {
                 if let Some((start, end)) = get_selection_range(*cursor, *anchor) {
                     replace_range(text, start, end, "\n");
                     if is_multiline {
-                        crate::helpers::drain_style_set([
+                        crate::text::styles::drain_style_set([
                             &mut self.edit_body_bold,
                             &mut self.edit_body_italic,
                             &mut self.edit_body_underline,
                             &mut self.edit_body_strike,
                         ], start, end);
                     }
-                    crate::helpers::insert_style_set(
+                    crate::text::styles::insert_style_set(
                         [
                             &mut self.edit_body_bold,
                             &mut self.edit_body_italic,
@@ -505,7 +507,7 @@ impl NotesApp {
                     chars.insert(*cursor, '\n');
                     *text = chars.into_iter().collect();
                     if is_multiline {
-                        crate::helpers::insert_style_set([
+                        crate::text::styles::insert_style_set([
                             &mut self.edit_body_bold,
                             &mut self.edit_body_italic,
                             &mut self.edit_body_underline,
@@ -525,7 +527,7 @@ impl NotesApp {
             if let Some((start, end)) = get_selection_range(*cursor, *anchor) {
                 replace_range(text, start, end, "");
                 if is_multiline {
-                    crate::helpers::drain_style_set([
+                    crate::text::styles::drain_style_set([
                             &mut self.edit_body_bold,
                             &mut self.edit_body_italic,
                             &mut self.edit_body_underline,
@@ -538,7 +540,7 @@ impl NotesApp {
                 let mut chars: Vec<char> = text.chars().collect();
                 chars.remove(*cursor - 1);
                 if is_multiline {
-                    crate::helpers::remove_style_set([
+                    crate::text::styles::remove_style_set([
                             &mut self.edit_body_bold,
                             &mut self.edit_body_italic,
                             &mut self.edit_body_underline,
@@ -555,7 +557,7 @@ impl NotesApp {
             if let Some((start, end)) = get_selection_range(*cursor, *anchor) {
                 replace_range(text, start, end, "");
                 if is_multiline {
-                    crate::helpers::drain_style_set([
+                    crate::text::styles::drain_style_set([
                             &mut self.edit_body_bold,
                             &mut self.edit_body_italic,
                             &mut self.edit_body_underline,
@@ -570,7 +572,7 @@ impl NotesApp {
                     let mut chars: Vec<char> = text.chars().collect();
                     chars.remove(*cursor);
                     if is_multiline {
-                        crate::helpers::remove_style_set([
+                        crate::text::styles::remove_style_set([
                             &mut self.edit_body_bold,
                             &mut self.edit_body_italic,
                             &mut self.edit_body_underline,
@@ -611,14 +613,14 @@ impl NotesApp {
                 if let Some((start, end)) = get_selection_range(*cursor, *anchor) {
                     replace_range(text, start, end, &cleaned_char);
                     if is_multiline {
-                        crate::helpers::drain_style_set([
+                        crate::text::styles::drain_style_set([
                             &mut self.edit_body_bold,
                             &mut self.edit_body_italic,
                             &mut self.edit_body_underline,
                             &mut self.edit_body_strike,
                         ], start, end);
                     }
-                    crate::helpers::insert_style_set(
+                    crate::text::styles::insert_style_set(
                         [
                             &mut self.edit_body_bold,
                             &mut self.edit_body_italic,
@@ -639,7 +641,7 @@ impl NotesApp {
                     }
                     *text = chars.into_iter().collect();
                     if is_multiline {
-                        crate::helpers::insert_style_set(
+                        crate::text::styles::insert_style_set(
                             [
                             &mut self.edit_body_bold,
                             &mut self.edit_body_italic,

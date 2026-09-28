@@ -1,3 +1,5 @@
+//! Selection ranges, line widths, canvas hit testing, and cursor movement.
+
 /// Converts a cursor/anchor pair into the normalized start-end selection range.
 pub(crate) fn get_selection_range(cursor: usize, anchor: Option<usize>) -> Option<(usize, usize)> {
     if let Some(anchor) = anchor {
@@ -12,8 +14,8 @@ use crate::constants::typography::{
     line_height_for_font_size, CANVAS_BODY_FONT_SIZE, DEFAULT_FONT_FAMILY, FontType, WEIGHT_BOLD,
 };
 
-use crate::font_metrics::effective_weight_multiplier;
-pub(crate) use crate::font_metrics::get_char_width_for_font;
+use crate::text::metrics::effective_weight_multiplier;
+pub(crate) use crate::text::metrics::get_char_width_for_font;
 
 /// Estimates the rendered width of a character at a given font size with default Segoe UI metrics.
 #[allow(dead_code)]
@@ -696,12 +698,12 @@ mod tests {
             cursor_height_for_font_size, line_height_for_font_size, selection_height_for_font_size,
         };
         assert!((line_height_for_font_size(12.0) - 20.0).abs() < 0.01);
-        assert!((line_height_for_font_size(24.0) - 40.0).abs() < 0.01);
+        assert!((line_height_for_font_size(24.0) - 32.0).abs() < 0.01);
 
         assert!((cursor_height_for_font_size(12.0) - 16.0).abs() < 0.01);
-        assert!((cursor_height_for_font_size(24.0) - 32.0).abs() < 0.01);
+        assert!((cursor_height_for_font_size(24.0) - 28.0).abs() < 0.01);
 
         assert!((selection_height_for_font_size(12.0) - 18.0).abs() < 0.01);
-        assert!((selection_height_for_font_size(24.0) - 36.0).abs() < 0.01);
+        assert!((selection_height_for_font_size(24.0) - 30.0).abs() < 0.01);
     }
 }

@@ -22,7 +22,7 @@ main()
 
 > [!NOTE]
 > **Key Architectural Insight:**  
-> The actual *"initial screen loading"* is completed by GPUI's reactive render pipeline—specifically [`render_detail_pane()`](src/views/detail_pane.rs) and [`load_note_content()`](src/models.rs)—and **not** by a separate manual loader function after [`NotesApp::new`](src/app/actions.rs).
+> The actual *"initial screen loading"* is completed by GPUI's reactive render pipeline—specifically [`render_detail_pane()`](src/views/detail_pane.rs) and [`load_note_content()`](src/models/mod.rs)—and **not** by a separate manual loader function after [`NotesApp::new`](src/app/editing.rs).
 
 ---
 
@@ -54,7 +54,7 @@ main()
                         └── render_detail_pane()
                             ├── find selected note
                             ├── load_note_content(&note.body, &note.images)
-                            │   └── models.rs
+                            │   └── src/models/mod.rs
                             ├── active section/page selected
                             ├── if editing:
                             │   └── render_canvas_editor()
@@ -78,7 +78,7 @@ flowchart TD
     subgraph S2["2. Window & Entity Creation"]
         C --> D["cx.open_window(...)"]
         D --> E["cx.new(NotesApp::new)"]
-        E --> F["NotesApp::new() in src/app/actions.rs"]
+        E --> F["NotesApp::new() in src/app/editing.rs"]
     end
 
     subgraph S3["3. State & Model Hydration"]
@@ -142,7 +142,7 @@ let handler = builder.spawn(|| {
 
 ---
 
-### Step 2: State Initialization & Persistence Loading (`src/app/actions.rs`)
+### Step 2: State Initialization & Persistence Loading (`src/app/editing.rs`)
 Inside `NotesApp::new(cx)`:
 1. **Load Data:** Calls `Self::load_notes()` (implemented in [`src/app/storage.rs`](src/app/storage.rs)), which reads and parses `notes.json` from disk.
 2. **Default Selection:** Selects the first available note:
@@ -187,7 +187,7 @@ impl Render for NotesApp {
 ### Step 4: Detail Pane & Note Parsing (`src/views/detail_pane.rs`)
 When `render_detail_pane()` runs:
 1. It looks up the note corresponding to `self.selected_note_id`.
-2. It parses the raw JSON body into the in-memory `NoteContent` hierarchy via `load_note_content(&note.body, &note.images)` (from [`src/models.rs`](src/models.rs)).
+2. It parses the raw JSON body into the in-memory `NoteContent` hierarchy via `load_note_content(&note.body, &note.images)` (from [`src/models/mod.rs`](src/models/mod.rs)).
 3. It builds the right vertical page navigation list based on active sections.
 4. It branches based on `self.is_editing`:
    * **Edit Mode (`true`):** Calls `render_canvas_editor(...)` to build interactive editable text blocks, image blocks, and toolbars.

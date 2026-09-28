@@ -3,11 +3,16 @@ use gpui::{
 };
 use std::ops::Range;
 
+use crate::constants::colors::{TEXT_HINT, TEXT_PRIMARY};
+
 #[derive(Clone)]
 #[allow(dead_code)]
 pub struct TextEditor {
     pub text: String,
     pub bold_flags: Vec<bool>,
+    pub italic_flags: Vec<bool>,
+    pub underline_flags: Vec<bool>,
+    pub strike_flags: Vec<bool>,
     pub cursor: usize,
     pub anchor: Option<usize>,
     pub focus_handle: FocusHandle,
@@ -41,6 +46,9 @@ impl TextEditor {
         let cursor = text.chars().count();
         Self {
             bold_flags: vec![false; cursor],
+            italic_flags: vec![false; cursor],
+            underline_flags: vec![false; cursor],
+            strike_flags: vec![false; cursor],
             text,
             cursor,
             anchor: None,
@@ -350,7 +358,7 @@ impl TextEditor {
                 } else {
                     div()
                 })
-                .child(div().text_color(rgb(0x606060)).text_size(px(font_size)).child("Type note..."));
+                .child(div().text_color(rgb(TEXT_HINT)).text_size(px(font_size)).child("Type note..."));
             return line_wrapper(0, 0, "", row).into_any_element();
         }
 
@@ -472,34 +480,32 @@ impl TextEditor {
                 }
             }
 
-            // Render line text as styled runs with bold support
-            let runs = crate::helpers::split_text_into_styled_runs(line, &line_bold_flags);
+            let line_italic = crate::helpers::slice_flags(&self.italic_flags, line_start, line_end, line_len);
+            let line_underline =
+                crate::helpers::slice_flags(&self.underline_flags, line_start, line_end, line_len);
+            let line_strike = crate::helpers::slice_flags(&self.strike_flags, line_start, line_end, line_len);
+
+            // Render line text as styled runs (bold, italic, underline, strikethrough)
+            let runs = crate::helpers::split_text_into_full_runs(
+                line,
+                &line_bold_flags,
+                &line_italic,
+                &line_underline,
+                &line_strike,
+            );
             let mut line_elements = Vec::new();
             if runs.is_empty() {
                 line_elements.push(
                     div()
-                        .text_color(rgb(0xd4d4d4))
+                        .text_color(rgb(TEXT_PRIMARY))
                         .text_size(px(font_size))
                         .child("\u{00A0}")
                         .into_any_element(),
                 );
             } else {
                 for run in &runs {
-                    let disp = run.text.replace(' ', "\u{00A0}");
-                    let el = div()
-                        .text_color(if run.is_bold {
-                            rgb(0xffffff)
-                        } else {
-                            rgb(0xd4d4d4)
-                        })
-                        .text_size(px(font_size))
-                        .font_weight(if run.is_bold {
-                            gpui::FontWeight::BOLD
-                        } else {
-                            gpui::FontWeight::NORMAL
-                        })
-                        .child(disp);
-                    line_elements.push(el.into_any_element());
+                    let color = if run.is_bold { 0xffffff } else { TEXT_PRIMARY };
+                    line_elements.push(styled_run_element(run, font_size, color, true));
                 }
             }
 
@@ -523,21 +529,18 @@ impl TextEditor {
                 let line_chars: Vec<char> = line.chars().collect();
                 let before_prefix: String = line_chars[..local_cursor].iter().collect();
                 let before_flags = &line_bold_flags[..local_cursor.min(line_bold_flags.len())];
-                let prefix_runs = crate::helpers::split_text_into_styled_runs(&before_prefix, before_flags);
+                let before_italic = &line_italic[..local_cursor.min(line_italic.len())];
+                let prefix_runs = crate::helpers::split_text_into_full_runs(
+                    &before_prefix,
+                    before_flags,
+                    before_italic,
+                    &[],
+                    &[],
+                );
 
                 let mut ghost_elements = Vec::new();
                 for run in &prefix_runs {
-                    let disp = run.text.replace(' ', "\u{00A0}");
-                    let el = div()
-                        .text_color(rgba(0x00000000))
-                        .text_size(px(font_size))
-                        .font_weight(if run.is_bold {
-                            gpui::FontWeight::BOLD
-                        } else {
-                            gpui::FontWeight::NORMAL
-                        })
-                        .child(disp);
-                    ghost_elements.push(el.into_any_element());
+                    ghost_elements.push(styled_run_element(run, font_size, 0x00000000, false));
                 }
 
                 row = row.child(
@@ -575,4 +578,45 @@ impl TextEditor {
             .children(line_rows)
             .into_any_element()
     }
+}
+
+/// Paints one styled text run. Decorations are skipped for invisible width-matching ghosts.
+pub(crate) fn styled_run_element(
+    run: &crate::helpers::StyledRun,
+    font_size: f32,
+    color: u32,
+    decorations: bool,
+) -> AnyElement {
+    let mut el = div()
+        .relative()
+        .text_color(if color == 0 {
+            rgba(0x00000000)
+        } else {
+            rgb(color)
+        })
+        .text_size(px(font_size))
+        .font_weight(if run.is_bold {
+            gpui::FontWeight::BOLD
+        } else {
+            gpui::FontWeight::NORMAL
+        });
+    if run.is_italic {
+        el = el.italic();
+    }
+    el = el.child(run.text.replace(' ', "\u{00A0}"));
+    if decorations && run.is_underline {
+        el = el.border_b_1().border_color(rgb(color));
+    }
+    if decorations && run.is_strike {
+        el = el.child(
+            div()
+                .absolute()
+                .top(px((font_size * 0.55).max(1.0)))
+                .left(px(0.0))
+                .right(px(0.0))
+                .h(px(1.0))
+                .bg(rgb(color)),
+        );
+    }
+    el.into_any_element()
 }

@@ -1,7 +1,11 @@
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, MouseButton, Window};
 
 use crate::app::NotesApp;
-use crate::constants::{layout::NOTE_ITEM_TEXT_OFFSET_X, typography::WEIGHT_SEMIBOLD};
+use crate::constants::{
+    colors::{TEXT_PRIMARY, TEXT_SECONDARY},
+    layout::NOTE_ITEM_TEXT_OFFSET_X,
+    typography::{META_FONT_SIZE, WEIGHT_SEMIBOLD},
+};
 use crate::models::ActiveField;
 use crate::text_selection::{calculate_line_text_offset_with_font, get_selection_range};
 
@@ -126,7 +130,7 @@ impl NotesApp {
                                             div()
                                                 .text_size(px(self.note_heading_font_size))
                                                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                                                .text_color(rgb(0xe0e0e0))
+                                                .text_color(rgb(TEXT_PRIMARY))
                                                 .child(if self.is_editing && is_selected {
                                                     let is_focused = is_note_heading_focused;
                                                     let font_size = self.note_heading_font_size;
@@ -152,7 +156,7 @@ impl NotesApp {
                                                             )
                                                             .child(
                                                                 div()
-                                                                    .text_color(rgb(0x808080))
+                                                                    .text_color(rgb(TEXT_SECONDARY))
                                                                     .child("Notebook Name..."),
                                                             )
                                                             .child(if is_focused {
@@ -324,8 +328,8 @@ impl NotesApp {
                                         )
                                         .child(
                                             div()
-                                                .text_size(px(10.0))
-                                                .text_color(rgb(0x808080))
+                                                .text_size(px(META_FONT_SIZE))
+                                                .text_color(rgb(TEXT_SECONDARY))
                                                 .child(note.created_at.clone()),
                                         ),
                                 )

@@ -30,10 +30,16 @@ pub struct NotesApp {
     pub(crate) is_selecting_body: bool,
     pub(crate) edit_images: Vec<String>,
     pub(crate) edit_body_bold: Vec<bool>,
+    pub(crate) edit_body_italic: Vec<bool>,
+    pub(crate) edit_body_underline: Vec<bool>,
+    pub(crate) edit_body_strike: Vec<bool>,
 
     // Canvas State
     pub(crate) edit_canvas_items: Vec<CanvasItem>,
     pub(crate) active_text_block_id: Option<String>,
+    /// When the active block belongs to a `CanvasItem::Mixed`, this is the index of the
+    /// `Text` entry inside `blocks` that `edit_body`/`edit_body_bold` mirror.
+    pub(crate) active_block_index: Option<usize>,
 
     // Drag/Pan/Resize State
     pub(crate) drag_item_id: Option<String>,
@@ -41,6 +47,9 @@ pub struct NotesApp {
     pub(crate) drag_start_item_pos: Option<(f32, f32)>,
 
     pub(crate) resize_item_id: Option<String>,
+    /// When resizing an image inside a `CanvasItem::Mixed`, the index of that `Image` block
+    /// inside `blocks`. `None` means the whole item (or its text width) is being resized.
+    pub(crate) resize_block_index: Option<usize>,
     pub(crate) resize_start_mouse: Option<gpui::Point<gpui::Pixels>>,
     pub(crate) resize_start_size: Option<(f32, f32)>,
 
@@ -74,6 +83,8 @@ pub struct NotesApp {
 
     // Sidebar State
     pub(crate) is_sidebar_open: bool,
+    /// Whether the Home formatting menu is open.
+    pub(crate) home_menu_open: bool,
 
     // Viewer Text Selection State
     pub(crate) viewer_active_text_block_id: Option<String>,

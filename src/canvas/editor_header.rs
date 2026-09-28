@@ -2,8 +2,9 @@ use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, Mou
 
 use crate::app::NotesApp;
 use crate::constants::{
+    colors::{TEXT_PRIMARY, TEXT_SECONDARY},
     layout::HEADING_PADDING_LEFT,
-    typography::{WEIGHT_BOLD, WEIGHT_NORMAL},
+    typography::{BUTTON_FONT_SIZE, SMALL_ICON_FONT_SIZE, WEIGHT_BOLD, WEIGHT_NORMAL},
 };
 use crate::helpers::hash_str;
 use crate::models::{ActiveField, NoteContent};
@@ -22,6 +23,7 @@ impl NotesApp {
                 .relative()
                 .flex()
                 .items_center()
+                .cursor_text()
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|this, _, window, cx| {
@@ -39,7 +41,7 @@ impl NotesApp {
                     div()
                         .text_size(px(font_size))
                         .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(rgb(0x808080))
+                        .text_color(rgb(TEXT_SECONDARY))
                         .child("Section Name..."),
                 )
                 .child(if is_focused {
@@ -166,6 +168,7 @@ impl NotesApp {
                 .relative()
                 .flex()
                 .items_center()
+                .cursor_text()
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
@@ -262,14 +265,19 @@ impl NotesApp {
                 .text_color(if is_active {
                     rgb(0xffffff)
                 } else {
-                    rgb(0x808080)
+                    rgb(TEXT_SECONDARY)
                 })
                 .font_weight(if is_active {
                     gpui::FontWeight::BOLD
                 } else {
                     gpui::FontWeight::NORMAL
-                })
-                .cursor_pointer()
+                });
+            tab_el = if is_active {
+                tab_el.cursor_text()
+            } else {
+                tab_el.cursor_pointer()
+            };
+            tab_el = tab_el
                 .on_click(cx.listener(move |this, _, _, cx| {
                     this.switch_to_section(click_id.clone(), cx);
                 }))
@@ -289,6 +297,8 @@ impl NotesApp {
                         .id(("delete-sec", hash_str(&sec_id)))
                         .text_color(rgb(0xff6b6b))
                         .hover(|s| s.text_color(rgb(0xff0000)))
+                        .cursor_pointer()
+                        .text_size(px(SMALL_ICON_FONT_SIZE))
                         .child("×")
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.delete_section(delete_id.clone(), cx);
@@ -347,7 +357,7 @@ impl NotesApp {
                     .hover(|s| s.bg(rgb(0x3d3d3d)))
                     .rounded(px(4.0))
                     .cursor_pointer()
-                    .text_size(px(11.0))
+                    .text_size(px(BUTTON_FONT_SIZE))
                     .font_weight(gpui::FontWeight::BOLD)
                     .text_color(rgb(0xffffff))
                     .on_click(cx.listener(|this, _, _, cx| {
@@ -364,7 +374,7 @@ impl NotesApp {
                     .hover(|s| s.bg(rgb(0x106ebe)))
                     .rounded(px(4.0))
                     .cursor_pointer()
-                    .text_size(px(11.0))
+                    .text_size(px(BUTTON_FONT_SIZE))
                     .text_color(rgb(0xffffff))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.save_edit(cx);
@@ -380,8 +390,8 @@ impl NotesApp {
                     .hover(|s| s.bg(rgb(0x505050)))
                     .rounded(px(4.0))
                     .cursor_pointer()
-                    .text_size(px(11.0))
-                    .text_color(rgb(0xd4d4d4))
+                    .text_size(px(BUTTON_FONT_SIZE))
+                    .text_color(rgb(TEXT_PRIMARY))
                     .on_click(cx.listener(|this, _, _, cx| {
                         this.cancel_edit(cx);
                     }))
@@ -410,6 +420,7 @@ impl NotesApp {
                 .relative()
                 .flex()
                 .items_center()
+                .cursor_text()
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|this, _, window, cx| {
@@ -426,7 +437,7 @@ impl NotesApp {
                 .child(
                     div()
                         .text_size(px(font_size))
-                        .text_color(rgb(0x808080))
+                        .text_color(rgb(TEXT_SECONDARY))
                         .child("Heading..."),
                 )
                 .child(if is_heading_focused {
@@ -549,6 +560,7 @@ impl NotesApp {
                 .relative()
                 .flex()
                 .items_center()
+                .cursor_text()
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {

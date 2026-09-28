@@ -7,7 +7,7 @@
 #[allow(dead_code)]
 pub(crate) mod typography {
     /// Default application font family name.
-    pub(crate) const DEFAULT_FONT_FAMILY: &str = "Segoe UI";
+    pub(crate) const DEFAULT_FONT_FAMILY: &str = "Calibri";
 
     /// Font categories supported by the application text engine.
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,20 +45,35 @@ pub(crate) mod typography {
         }
     }
 
-    /// Font size for notebook/note headings in the sidebar (default: 14.0px).
-    pub(crate) const NOTE_HEADING_FONT_SIZE: f32 = 14.0;
+    /// Font size for notebook/note headings in the sidebar (11pt, 14.67px).
+    pub(crate) const NOTE_HEADING_FONT_SIZE: f32 = 14.67;
 
-    /// Font size for section tabs in the canvas header (default: 11.0px).
-    pub(crate) const SECTION_NAME_FONT_SIZE: f32 = 11.0;
+    /// Font size for section tabs in the canvas header (10pt, 13.33px).
+    pub(crate) const SECTION_NAME_FONT_SIZE: f32 = 13.33;
 
-    /// Font size for the page title / heading above the canvas (default: 20.0px).
-    pub(crate) const PAGE_HEADING_FONT_SIZE: f32 = 20.0;
+    /// Font size for the page title / heading above the canvas (20pt, 26.67px, OneNote page title).
+    pub(crate) const PAGE_HEADING_FONT_SIZE: f32 = 26.67;
 
-    /// Font size for canvas text blocks (default: 12.0px).
-    pub(crate) const CANVAS_BODY_FONT_SIZE: f32 = 12.0;
+    /// Font size for canvas text blocks (11pt, 14.67px, OneNote body text).
+    pub(crate) const CANVAS_BODY_FONT_SIZE: f32 = 14.67;
 
-    /// Font size for page list items in the detail pane sidebar (default: 11.0px).
-    pub(crate) const PAGE_LIST_FONT_SIZE: f32 = 11.0;
+    /// Font size for page list items in the detail pane sidebar (10pt, 13.33px).
+    pub(crate) const PAGE_LIST_FONT_SIZE: f32 = 13.33;
+
+    /// Font size for toolbar buttons such as Bold, Save, Cancel, Edit Note and Delete Note.
+    pub(crate) const BUTTON_FONT_SIZE: f32 = 13.0;
+
+    /// Font size for hint lines shown inside the canvas.
+    pub(crate) const HINT_FONT_SIZE: f32 = 12.0;
+
+    /// Font size for small glyph buttons such as the "×" delete buttons.
+    pub(crate) const SMALL_ICON_FONT_SIZE: f32 = 12.0;
+
+    /// Font size for small metadata labels in the sidebar.
+    pub(crate) const META_FONT_SIZE: f32 = 12.0;
+
+    /// Font size for the empty-state message in the detail pane.
+    pub(crate) const EMPTY_STATE_FONT_SIZE: f32 = 16.0;
 
     // Standard Font Weight Multipliers used for accurate hit-testing
     pub(crate) const WEIGHT_NORMAL: f32 = 1.00;
@@ -85,7 +100,22 @@ pub(crate) mod typography {
 }
 
 #[allow(dead_code)]
+pub(crate) mod colors {
+    /// Base text color for regular content.
+    pub(crate) const TEXT_PRIMARY: u32 = 0xe0e0e0;
+
+    /// Dimmed text for placeholders, inactive tabs, and secondary labels.
+    pub(crate) const TEXT_SECONDARY: u32 = 0x9e9e9e;
+
+    /// Hint text shown inside the canvas and empty text blocks.
+    pub(crate) const TEXT_HINT: u32 = 0x8a8a8a;
+}
+
+#[allow(dead_code)]
 pub(crate) mod layout {
+    /// Initial canvas top edge in window coordinates; replaced by the measured value after the first paint.
+    pub(crate) const INITIAL_CANVAS_TOP_Y: f32 = 78.0;
+
     /// Left padding of the sidebar container.
     pub(crate) const SIDEBAR_PADDING_LEFT: f32 = 12.0;
 

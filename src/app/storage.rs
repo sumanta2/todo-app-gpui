@@ -3,8 +3,8 @@ use std::fs;
 use std::path::PathBuf;
 
 use crate::app::NotesApp;
-use crate::helpers::encrypt_decrypt;
-use crate::models::{CanvasItem, ImageItem, Note};
+use crate::helpers::{encrypt_decrypt, split_text_and_bold_at};
+use crate::models::{ActiveField, CanvasItem, ContentBlock, ImageItem, MixedItem, Note};
 
 /// Persistent storage helpers for the app's notes and image files.
 ///
@@ -98,23 +98,118 @@ impl NotesApp {
 
             if fs::write(&path, &encrypted_bytes).is_ok() {
                 if let Some(path_str) = path.to_str() {
-                    let new_id = chrono::Local::now().timestamp_millis().to_string();
-                    let new_image_item = ImageItem {
-                        id: new_id,
-                        x: -self.pan_x + 50.0,
-                        y: -self.pan_y + 50.0,
-                        path: path_str.to_owned(),
-                        width: 240.0,
-                        height: 180.0,
-                    };
-                    self.edit_canvas_items
-                        .push(CanvasItem::Image(new_image_item));
-                    // Keep self.edit_images in sync as well.
-                    self.edit_images.push(path_str.to_owned());
+                    let path_str = path_str.to_owned();
+                    self.edit_images.push(path_str.clone());
+
+                    let inserted_inline = self.insert_image_into_active_text(path_str.clone());
+                    if !inserted_inline {
+                        let new_id = chrono::Local::now().timestamp_millis().to_string();
+                        let new_image_item = ImageItem {
+                            id: new_id,
+                            x: -self.pan_x + 50.0,
+                            y: -self.pan_y + 50.0,
+                            path: path_str,
+                            width: 240.0,
+                            height: 180.0,
+                        };
+                        self.edit_canvas_items
+                            .push(CanvasItem::Image(new_image_item));
+                    }
                     cx.notify();
                 }
             }
         }
+    }
+
+    /// Splits the currently focused text block at the cursor and inserts a new image between
+    /// the two halves, so the remaining text presents right after the image in the same box.
+    ///
+    /// Returns `false` when there is no active text block to insert into (for example, when
+    /// nothing is focused), in which case the caller should fall back to a standalone image box.
+    fn insert_image_into_active_text(&mut self, image_path: String) -> bool {
+        if self.active_field != ActiveField::Body {
+            return false;
+        }
+        let Some(active_id) = self.active_text_block_id.clone() else {
+            return false;
+        };
+
+        let cursor = self.edit_body_cursor;
+        let (before_text, before_bold, after_text, after_bold) =
+            split_text_and_bold_at(&self.edit_body, &self.edit_body_bold, cursor);
+        let (_, before_italic, _, after_italic) =
+            split_text_and_bold_at(&self.edit_body, &self.edit_body_italic, cursor);
+        let (_, before_underline, _, after_underline) =
+            split_text_and_bold_at(&self.edit_body, &self.edit_body_underline, cursor);
+        let (_, before_strike, _, after_strike) =
+            split_text_and_bold_at(&self.edit_body, &self.edit_body_strike, cursor);
+
+        let mut replacement = Vec::new();
+        if !before_text.is_empty() {
+            replacement.push(ContentBlock::Text {
+                text: before_text,
+                bold_spans: crate::helpers::bool_vec_to_spans(&before_bold),
+                italic_spans: crate::helpers::bool_vec_to_spans(&before_italic),
+                underline_spans: crate::helpers::bool_vec_to_spans(&before_underline),
+                strike_spans: crate::helpers::bool_vec_to_spans(&before_strike),
+            });
+        }
+        replacement.push(ContentBlock::Image {
+            path: image_path,
+            width: 240.0,
+            height: 180.0,
+        });
+        let after_pos = replacement.len();
+        replacement.push(ContentBlock::Text {
+            text: after_text.clone(),
+            bold_spans: crate::helpers::bool_vec_to_spans(&after_bold),
+            italic_spans: crate::helpers::bool_vec_to_spans(&after_italic),
+            underline_spans: crate::helpers::bool_vec_to_spans(&after_underline),
+            strike_spans: crate::helpers::bool_vec_to_spans(&after_strike),
+        });
+
+        let Some(item) = self
+            .edit_canvas_items
+            .iter_mut()
+            .find(|i| match i {
+                CanvasItem::Text(t) => t.id == active_id,
+                CanvasItem::Mixed(m) => m.id == active_id,
+                CanvasItem::Image(_) => false,
+            })
+        else {
+            return false;
+        };
+
+        let new_active_block_index = match item {
+            CanvasItem::Text(t) => {
+                let mixed = MixedItem {
+                    id: t.id.clone(),
+                    x: t.x,
+                    y: t.y,
+                    width: t.width,
+                    blocks: replacement,
+                };
+                *item = CanvasItem::Mixed(mixed);
+                after_pos
+            }
+            CanvasItem::Mixed(m) => {
+                let idx = self.active_block_index.unwrap_or(0).min(m.blocks.len());
+                let end = (idx + 1).min(m.blocks.len());
+                m.blocks.splice(idx..end, replacement);
+                idx + after_pos
+            }
+            CanvasItem::Image(_) => return false,
+        };
+
+        self.active_block_index = Some(new_active_block_index);
+        self.edit_body = after_text;
+        self.edit_body_bold = after_bold;
+        self.edit_body_italic = after_italic;
+        self.edit_body_underline = after_underline;
+        self.edit_body_strike = after_strike;
+        self.edit_body_cursor = 0;
+        self.edit_body_anchor = None;
+        true
     }
 
     /// Loads an image from disk and decrypts it back into a `gpui::Image`.

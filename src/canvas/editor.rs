@@ -1,9 +1,11 @@
 use gpui::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButton, Window};
 
 use crate::app::NotesApp;
+use crate::canvas::canvas_top_tracker;
 use crate::constants::{
+    colors::TEXT_HINT,
     layout::HEADING_PADDING_LEFT,
-    typography::{WEIGHT_BOLD, WEIGHT_NORMAL},
+    typography::{HINT_FONT_SIZE, WEIGHT_BOLD, WEIGHT_NORMAL},
 };
 use crate::models::{ActiveField, CanvasItem, Note, NoteContent, TextItem};
 use crate::text_selection::{calculate_canvas_drag_offset_full, calculate_line_text_offset_with_font};
@@ -85,6 +87,7 @@ impl NotesApp {
                         if let Some(item) = this.edit_canvas_items.iter_mut().find(|i| match i {
                             CanvasItem::Text(t) => t.id == *item_id,
                             CanvasItem::Image(img) => img.id == *item_id,
+                            CanvasItem::Mixed(m) => m.id == *item_id,
                         }) {
                             match item {
                                 CanvasItem::Text(t) => {
@@ -94,6 +97,10 @@ impl NotesApp {
                                 CanvasItem::Image(img) => {
                                     img.x = new_x;
                                     img.y = new_y;
+                                }
+                                CanvasItem::Mixed(m) => {
+                                    m.x = new_x;
+                                    m.y = new_y;
                                 }
                             }
                             changed = true;
@@ -107,10 +114,12 @@ impl NotesApp {
                         let dy = event.position.y.as_f32() - start_mouse.y.as_f32();
                         let new_width = (start_size.0 + dx).max(100.0);
                         let new_height = (start_size.1 + dy).max(50.0);
+                        let resize_block_index = this.resize_block_index;
 
                         if let Some(item) = this.edit_canvas_items.iter_mut().find(|i| match i {
                             CanvasItem::Text(t) => t.id == *resize_id,
                             CanvasItem::Image(img) => img.id == *resize_id,
+                            CanvasItem::Mixed(m) => m.id == *resize_id,
                         }) {
                             match item {
                                 CanvasItem::Text(t) => {
@@ -120,19 +129,40 @@ impl NotesApp {
                                     img.width = new_width;
                                     img.height = new_height;
                                 }
+                                CanvasItem::Mixed(m) => {
+                                    if let Some(idx) = resize_block_index {
+                                        // Resizing the image inside the box: zoom the image only.
+                                        if let Some(crate::models::ContentBlock::Image {
+                                            width,
+                                            height,
+                                            ..
+                                        }) = m.blocks.get_mut(idx)
+                                        {
+                                            *width = new_width;
+                                            *height = new_height;
+                                        }
+                                    } else {
+                                        // Resizing the whole box: adjust the text wrap width.
+                                        m.width = Some(new_width);
+                                    }
+                                }
                             }
                             changed = true;
                         }
                     }
                 } else if this.is_selecting_body {
                     if let Some(ref active_id) = this.active_text_block_id.clone() {
-                        if let Some(CanvasItem::Text(tx)) = this.edit_canvas_items.iter().find(|i| match i {
+                        let found = this.edit_canvas_items.iter().find(|i| match i {
                             CanvasItem::Text(t) => t.id == *active_id,
-                            _ => false,
-                        }) {
-                            let item_x = tx.x;
-                            let item_y = tx.y;
-                            let item_w = tx.width.unwrap_or(250.0);
+                            CanvasItem::Mixed(m) => m.id == *active_id,
+                            CanvasItem::Image(_) => false,
+                        });
+                        let pos_width = match found {
+                            Some(CanvasItem::Text(t)) => Some((t.x, t.y, t.width.unwrap_or(250.0))),
+                            Some(CanvasItem::Mixed(m)) => Some((m.x, m.y, m.width.unwrap_or(250.0))),
+                            _ => None,
+                        };
+                        if let Some((item_x, item_y, item_w)) = pos_width {
                             let drag_idx = calculate_canvas_drag_offset_full(
                                 event.position,
                                 this.is_sidebar_open,
@@ -230,20 +260,26 @@ impl NotesApp {
                                 this.sync_active_text_block();
 
                                 if let Some(ref active_id) = this.active_text_block_id {
-                                    let is_empty = this.edit_canvas_items.iter().any(|item| {
-                                        if let CanvasItem::Text(t) = item {
+                                    let is_empty = this.edit_canvas_items.iter().any(|item| match item {
+                                        CanvasItem::Text(t) => {
                                             t.id == *active_id && t.text.trim().is_empty()
-                                        } else {
-                                            false
                                         }
+                                        CanvasItem::Mixed(m) => {
+                                            m.id == *active_id
+                                                && !m.blocks.iter().any(|b| match b {
+                                                    crate::models::ContentBlock::Image { .. } => true,
+                                                    crate::models::ContentBlock::Text { text, .. } => {
+                                                        !text.trim().is_empty()
+                                                    }
+                                                })
+                                        }
+                                        CanvasItem::Image(_) => false,
                                     });
                                     if is_empty {
-                                        this.edit_canvas_items.retain(|item| {
-                                            if let CanvasItem::Text(t) = item {
-                                                t.id != *active_id
-                                            } else {
-                                                true
-                                            }
+                                        this.edit_canvas_items.retain(|item| match item {
+                                            CanvasItem::Text(t) => t.id != *active_id,
+                                            CanvasItem::Mixed(m) => m.id != *active_id,
+                                            CanvasItem::Image(_) => true,
                                         });
                                     }
                                 }
@@ -256,11 +292,15 @@ impl NotesApp {
                                     text: String::new(),
                                     width: Some(250.0),
                                     bold_spans: Vec::new(),
+                                    italic_spans: Vec::new(),
+                                    underline_spans: Vec::new(),
+                                    strike_spans: Vec::new(),
                                 };
                                 this.edit_canvas_items.push(CanvasItem::Text(new_text_item));
                                 this.active_text_block_id = Some(new_id);
+                                this.active_block_index = None;
                                 this.edit_body = String::new();
-                                this.edit_body_bold = Vec::new();
+                                this.reset_body_styles();
                                 this.edit_body_cursor = 0;
                                 this.edit_body_anchor = None;
                                 this.active_field = ActiveField::Body;
@@ -271,6 +311,7 @@ impl NotesApp {
                     this.drag_start_mouse = None;
                     this.drag_start_item_pos = None;
                     this.resize_item_id = None;
+                    this.resize_block_index = None;
                     this.resize_start_mouse = None;
                     this.resize_start_size = None;
                     this.is_panning = false;
@@ -284,10 +325,11 @@ impl NotesApp {
                     .absolute()
                     .top(px(12.0))
                     .left(px(12.0))
-                    .text_size(px(11.0))
-                    .text_color(rgb(0x606060))
-                    .child("💡 Click canvas to type | Ctrl+B to bold | Drag headers to move | Ctrl+V to paste | Drag background to pan"),
+                    .text_size(px(HINT_FONT_SIZE))
+                    .text_color(rgb(TEXT_HINT))
+                    .child("💡 Click canvas to type | Home: B I U S | Ctrl+B / Ctrl+I / Ctrl+U | Drag headers to move | Ctrl+V to paste"),
             )
+            .child(canvas_top_tracker(cx.entity()))
             .children(canvas_elements);
 
         div()
@@ -322,6 +364,7 @@ impl NotesApp {
                                     } else {
                                         rgb(0x2d2d2d)
                                     })
+                                    .cursor_text()
                                     .on_mouse_down(
                                         MouseButton::Left,
                                         cx.listener(|this, _, window, cx| {

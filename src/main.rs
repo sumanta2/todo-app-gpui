@@ -15,6 +15,7 @@ use gpui::{
 use gpui_platform::application;
 
 use crate::app::NotesApp;
+use crate::constants::colors::TEXT_PRIMARY;
 
 impl Render for NotesApp {
     /// Builds the main application layout for the notes editor.
@@ -35,7 +36,7 @@ impl Render for NotesApp {
             .flex_row()
             .size_full()
             .bg(rgb(0x1e1e1e))
-            .text_color(rgb(0xd4d4d4))
+            .text_color(rgb(TEXT_PRIMARY))
             .font_family(self.font_family.as_str())
             .child(sidebar)
             .child(detail_pane)
@@ -69,6 +70,7 @@ fn main() {
     let handler = builder
         .spawn(|| {
             application().run(|cx: &mut App| {
+                cx.set_text_rendering_mode(gpui::TextRenderingMode::Subpixel);
                 let bounds = Bounds::centered(None, size(px(800.0), px(600.0)), cx);
 
                 cx.open_window(

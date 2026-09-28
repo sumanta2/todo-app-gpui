@@ -1,6 +1,10 @@
 use gpui::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, Window};
 
 use crate::app::NotesApp;
+use crate::constants::{
+    colors::{TEXT_PRIMARY, TEXT_SECONDARY},
+    typography::{EMPTY_STATE_FONT_SIZE, SMALL_ICON_FONT_SIZE},
+};
 use crate::helpers::hash_str;
 use crate::models::load_note_content;
 
@@ -71,7 +75,7 @@ impl NotesApp {
                                 .text_color(if is_active {
                                     rgb(0xffffff)
                                 } else {
-                                    rgb(0xd4d4d4)
+                                    rgb(TEXT_PRIMARY)
                                 })
                                 .font_weight(if is_active {
                                     gpui::FontWeight::BOLD
@@ -89,6 +93,7 @@ impl NotesApp {
                         page_row = page_row.child(
                             div()
                                 .id(("delete-page", hash_str(&page_id)))
+                                .text_size(px(SMALL_ICON_FONT_SIZE))
                                 .text_color(rgb(0xff6b6b))
                                 .hover(|s: gpui::StyleRefinement| s.text_color(rgb(0xff0000)))
                                 .child("×")
@@ -138,7 +143,7 @@ impl NotesApp {
                     .child(
                         div()
                             .text_size(px(self.page_list_font_size))
-                            .text_color(rgb(0x808080))
+                            .text_color(rgb(TEXT_SECONDARY))
                             .font_weight(gpui::FontWeight::BOLD)
                             .child("PAGES"),
                     )
@@ -157,7 +162,7 @@ impl NotesApp {
 
             // ====================================================================================================================
             // show the Canvas section where notes and image will show and user use to create different notes  ====================
-            if self.is_editing {
+            let page = if self.is_editing {
                 self.render_canvas_editor(
                     &note,
                     &content,
@@ -175,7 +180,19 @@ impl NotesApp {
                     cx,
                 )
                 .into_any_element()
-            }
+            };
+
+            div()
+                .relative()
+                .flex()
+                .flex_col()
+                .flex_1()
+                .h_full()
+                .bg(rgb(0x1e1e1e))
+                .child(self.render_home_ribbon(cx))
+                .child(page)
+                .children(self.render_home_menu_layers(cx))
+                .into_any_element()
         } else {
             // NO NOTE SELECTED PLACEHOLDER
             div()
@@ -188,8 +205,8 @@ impl NotesApp {
                 .bg(rgb(0x1e1e1e))
                 .child(
                     div()
-                        .text_size(px(16.0))
-                        .text_color(rgb(0x808080))
+                        .text_size(px(EMPTY_STATE_FONT_SIZE))
+                        .text_color(rgb(TEXT_SECONDARY))
                         .child("Select a note or create a new one to begin"),
                 )
                 .into_any_element()

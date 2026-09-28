@@ -9,9 +9,10 @@ pub(crate) fn get_selection_range(cursor: usize, anchor: Option<usize>) -> Optio
 }
 
 use crate::constants::typography::{
-    line_height_for_font_size, CANVAS_BODY_FONT_SIZE, DEFAULT_FONT_FAMILY, FontType,
+    line_height_for_font_size, CANVAS_BODY_FONT_SIZE, DEFAULT_FONT_FAMILY, FontType, WEIGHT_BOLD,
 };
 
+use crate::font_metrics::effective_weight_multiplier;
 pub(crate) use crate::font_metrics::get_char_width_for_font;
 
 /// Estimates the rendered width of a character at a given font size with default Segoe UI metrics.
@@ -27,6 +28,7 @@ pub(crate) fn calculate_text_width_for_font(
     weight_multiplier: f32,
     font_type: FontType,
 ) -> f32 {
+    let weight_multiplier = effective_weight_multiplier(weight_multiplier, font_type);
     let mut width = 0.0f32;
     for ch in text.chars() {
         width += get_char_width_for_font(ch, font_size, font_type) * weight_multiplier;
@@ -64,6 +66,7 @@ pub(crate) fn calculate_line_text_offset_with_font(
         return 0;
     }
 
+    let weight_multiplier = effective_weight_multiplier(weight_multiplier, font_type);
     let mut current_x = 0.0f32;
 
     for (idx, ch) in text.chars().enumerate() {
@@ -111,6 +114,7 @@ pub(crate) fn calculate_line_text_offset_with_bold_and_font(
         return 0;
     }
 
+    let bold_multiplier = effective_weight_multiplier(WEIGHT_BOLD, font_type);
     let mut current_x = 0.0f32;
 
     for (idx, ch) in text.chars().enumerate() {
@@ -119,7 +123,7 @@ pub(crate) fn calculate_line_text_offset_with_bold_and_font(
             .unwrap_or(false);
         let mut w = get_char_width_for_font(ch, font_size, font_type);
         if is_bold {
-            w *= 1.10;
+            w *= bold_multiplier;
         }
         let midpoint = current_x + (w / 2.0);
         let end_x = current_x + w;

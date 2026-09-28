@@ -1,6 +1,15 @@
 use gpui::Context;
 
 use crate::app::NotesApp;
+
+/// One of the character styles toggled from the Home ribbon or a keyboard shortcut.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TextStyleKind {
+    Bold,
+    Italic,
+    Underline,
+    Strike,
+}
 use crate::models::{
     load_canvas_items, load_note_content, save_canvas_items, ActiveField, CanvasItem, Note,
     NotePage, NoteSection,
@@ -33,6 +42,9 @@ impl NotesApp {
             is_selecting_body: false,
             edit_images: Vec::new(),
             edit_body_bold: Vec::new(),
+            edit_body_italic: Vec::new(),
+            edit_body_underline: Vec::new(),
+            edit_body_strike: Vec::new(),
             edit_canvas_items: Vec::new(),
             active_text_block_id: None,
             drag_item_id: None,
@@ -47,8 +59,10 @@ impl NotesApp {
             pan_has_dragged: false,
             pan_start_mouse: None,
             pan_start_val: None,
-            canvas_top_y: 78.0,
+            canvas_top_y: crate::constants::layout::INITIAL_CANVAS_TOP_Y,
             focus_handle: cx.focus_handle(),
+            active_block_index: None,
+            resize_block_index: None,
             active_section_id: None,
             active_page_id: None,
             edit_content: None,
@@ -62,6 +76,7 @@ impl NotesApp {
             is_selecting_section_name: false,
             active_section_tab_x: 0.0,
             is_sidebar_open: false,
+            home_menu_open: false,
             viewer_active_text_block_id: None,
             viewer_text_cursor: 0,
             viewer_text_anchor: None,
@@ -186,14 +201,28 @@ impl NotesApp {
                             self.edit_canvas_items.retain(|item| match item {
                                 CanvasItem::Text(t) => !t.text.trim().is_empty(),
                                 CanvasItem::Image(_) => true,
+                                CanvasItem::Mixed(m) => m.blocks.iter().any(|b| match b {
+                                    crate::models::ContentBlock::Image { .. } => true,
+                                    crate::models::ContentBlock::Text { text, .. } => {
+                                        !text.trim().is_empty()
+                                    }
+                                }),
                             });
 
                             page.body = save_canvas_items(&self.edit_canvas_items);
 
                             let mut saved_images = Vec::new();
                             for item in &self.edit_canvas_items {
-                                if let CanvasItem::Image(img) = item {
-                                    saved_images.push(img.path.clone());
+                                match item {
+                                    CanvasItem::Image(img) => saved_images.push(img.path.clone()),
+                                    CanvasItem::Mixed(m) => {
+                                        for b in &m.blocks {
+                                            if let crate::models::ContentBlock::Image { path, .. } = b {
+                                                saved_images.push(path.clone());
+                                            }
+                                        }
+                                    }
+                                    CanvasItem::Text(_) => {}
                                 }
                             }
                             self.edit_images = saved_images.clone();
@@ -237,8 +266,9 @@ impl NotesApp {
                         self.edit_heading_anchor = None;
 
                         self.active_text_block_id = None;
+                        self.active_block_index = None;
                         self.edit_body = String::new();
-                        self.edit_body_bold = Vec::new();
+                        self.reset_body_styles();
                         self.edit_body_cursor = 0;
                         self.edit_body_anchor = None;
                     }
@@ -422,8 +452,9 @@ impl NotesApp {
 
                 self.is_selecting_heading = false;
                 self.active_text_block_id = None;
+                self.active_block_index = None;
                 self.edit_body = String::new();
-                self.edit_body_bold = Vec::new();
+                self.reset_body_styles();
                 self.edit_body_cursor = 0;
                 self.edit_body_anchor = None;
                 self.is_selecting_body = false;
@@ -458,34 +489,74 @@ impl NotesApp {
                 let pan_x = self.pan_x;
                 let window_w = self.window_w;
                 let is_sidebar_open = self.is_sidebar_open;
-                if let Some(item) = self.edit_canvas_items.iter_mut().find(|i| match i {
-                    CanvasItem::Text(t) => t.id == *active_id,
-                    _ => false,
-                }) {
-                    if let CanvasItem::Text(t) = item {
-                        t.text = self.edit_body.clone();
-                        t.bold_spans = crate::helpers::bool_vec_to_spans(&self.edit_body_bold);
+                let edit_body = self.edit_body.clone();
+                let edit_body_bold = self.edit_body_bold.clone();
+                let edit_body_italic = self.edit_body_italic.clone();
+                let edit_body_underline = self.edit_body_underline.clone();
+                let edit_body_strike = self.edit_body_strike.clone();
+                let active_block_index = self.active_block_index;
 
-                        let max_line_len = self
-                            .edit_body
-                            .lines()
-                            .map(|line| line.chars().count())
-                            .max()
-                            .unwrap_or(0);
+                let max_line_len = edit_body
+                    .lines()
+                    .map(|line| line.chars().count())
+                    .max()
+                    .unwrap_or(0);
+                let line_text_w = max_line_len as f32 * 7.0;
+                let needed_width = line_text_w + 20.0;
+                let sidebar_w = if is_sidebar_open { 220.0 } else { 44.0 };
+                let page_sidebar_w = 180.0;
+                let canvas_visible_w =
+                    (window_w - sidebar_w - page_sidebar_w - 30.0).max(300.0);
 
-                        let line_text_w = max_line_len as f32 * 7.0;
-                        let needed_width = line_text_w + 20.0;
-                        let base_w = t.width.unwrap_or(250.0);
-                        let desired_w = needed_width.max(base_w).max(250.0);
+                if let Some(item) = self
+                    .edit_canvas_items
+                    .iter_mut()
+                    .find(|i| match i {
+                        CanvasItem::Text(t) => t.id == *active_id,
+                        CanvasItem::Mixed(m) => m.id == *active_id,
+                        CanvasItem::Image(_) => false,
+                    })
+                {
+                    match item {
+                        CanvasItem::Text(t) => {
+                            t.text = edit_body;
+                            t.bold_spans = crate::helpers::bool_vec_to_spans(&edit_body_bold);
+                            t.italic_spans = crate::helpers::bool_vec_to_spans(&edit_body_italic);
+                            t.underline_spans = crate::helpers::bool_vec_to_spans(&edit_body_underline);
+                            t.strike_spans = crate::helpers::bool_vec_to_spans(&edit_body_strike);
 
-                        let sidebar_w = if is_sidebar_open { 220.0 } else { 44.0 };
-                        let page_sidebar_w = 180.0;
-                        let canvas_visible_w =
-                            (window_w - sidebar_w - page_sidebar_w - 30.0).max(300.0);
-                        let canvas_max_right = canvas_visible_w - pan_x;
-                        let max_allowed_width = (canvas_max_right - t.x).max(150.0);
+                            let base_w = t.width.unwrap_or(250.0);
+                            let desired_w = needed_width.max(base_w).max(250.0);
+                            let canvas_max_right = canvas_visible_w - pan_x;
+                            let max_allowed_width = (canvas_max_right - t.x).max(150.0);
+                            t.width = Some(desired_w.min(max_allowed_width));
+                        }
+                        CanvasItem::Mixed(m) => {
+                            if let Some(idx) = active_block_index {
+                                if let Some(crate::models::ContentBlock::Text {
+                                    text,
+                                    bold_spans,
+                                    italic_spans,
+                                    underline_spans,
+                                    strike_spans,
+                                }) = m.blocks.get_mut(idx)
+                                {
+                                    *text = edit_body;
+                                    *bold_spans = crate::helpers::bool_vec_to_spans(&edit_body_bold);
+                                    *italic_spans = crate::helpers::bool_vec_to_spans(&edit_body_italic);
+                                    *underline_spans =
+                                        crate::helpers::bool_vec_to_spans(&edit_body_underline);
+                                    *strike_spans = crate::helpers::bool_vec_to_spans(&edit_body_strike);
+                                }
+                            }
 
-                        t.width = Some(desired_w.min(max_allowed_width));
+                            let base_w = m.width.unwrap_or(250.0);
+                            let desired_w = needed_width.max(base_w).max(250.0);
+                            let canvas_max_right = canvas_visible_w - pan_x;
+                            let max_allowed_width = (canvas_max_right - m.x).max(150.0);
+                            m.width = Some(desired_w.min(max_allowed_width));
+                        }
+                        CanvasItem::Image(_) => {}
                     }
                 }
             }
@@ -542,37 +613,96 @@ impl NotesApp {
         cx.notify();
     }
 
-    /// Toggles bold formatting on the current selection or, if no selection exists, on the
-    /// active character.
-    pub(crate) fn toggle_bold(&mut self, cx: &mut Context<Self>) {
-        if self.active_field != ActiveField::Body {
-            return;
-        }
+    /// Clears every per-character style flag for the text that is currently being edited.
+    pub(crate) fn reset_body_styles(&mut self) {
+        self.edit_body_bold.clear();
+        self.edit_body_italic.clear();
+        self.edit_body_underline.clear();
+        self.edit_body_strike.clear();
+    }
 
+    /// Loads bold, italic, underline, and strikethrough spans into the active editor buffers.
+    pub(crate) fn load_body_styles(&mut self, styles: &crate::models::TextStyleSpans, len: usize) {
+        self.edit_body_bold = crate::helpers::spans_to_bool_vec(&styles.bold, len);
+        self.edit_body_italic = crate::helpers::spans_to_bool_vec(&styles.italic, len);
+        self.edit_body_underline = crate::helpers::spans_to_bool_vec(&styles.underline, len);
+        self.edit_body_strike = crate::helpers::spans_to_bool_vec(&styles.strike, len);
+    }
+
+    fn body_style_flags_mut(&mut self, kind: TextStyleKind) -> &mut Vec<bool> {
+        match kind {
+            TextStyleKind::Bold => &mut self.edit_body_bold,
+            TextStyleKind::Italic => &mut self.edit_body_italic,
+            TextStyleKind::Underline => &mut self.edit_body_underline,
+            TextStyleKind::Strike => &mut self.edit_body_strike,
+        }
+    }
+
+    fn body_style_flags(&self, kind: TextStyleKind) -> &Vec<bool> {
+        match kind {
+            TextStyleKind::Bold => &self.edit_body_bold,
+            TextStyleKind::Italic => &self.edit_body_italic,
+            TextStyleKind::Underline => &self.edit_body_underline,
+            TextStyleKind::Strike => &self.edit_body_strike,
+        }
+    }
+
+    /// True when the current selection (or the character before the caret) uses this style.
+    pub(crate) fn text_style_is_on(&self, kind: TextStyleKind) -> bool {
+        if !self.is_editing || self.active_field != ActiveField::Body {
+            return false;
+        }
+        let flags = self.body_style_flags(kind);
         let char_count = self.edit_body.chars().count();
-        if self.edit_body_bold.len() < char_count {
-            self.edit_body_bold.resize(char_count, false);
-        }
-
         if let Some((start, end)) = crate::text_selection::get_selection_range(
             self.edit_body_cursor,
             self.edit_body_anchor,
         ) {
-            let start = start.min(char_count);
-            let end = end.min(char_count);
+            let start = start.min(flags.len()).min(char_count);
+            let end = end.min(flags.len()).min(char_count);
             if start < end {
-                let all_bold = self.edit_body_bold[start..end].iter().all(|&b| b);
-                let new_bold = !all_bold;
-                for i in start..end {
-                    self.edit_body_bold[i] = new_bold;
-                }
+                return flags[start..end].iter().all(|flag| *flag);
             }
-        } else {
-            let pos = self.edit_body_cursor;
-            if pos < char_count {
-                self.edit_body_bold[pos] = !self.edit_body_bold[pos];
-            } else if pos > 0 && pos - 1 < char_count {
-                self.edit_body_bold[pos - 1] = !self.edit_body_bold[pos - 1];
+        }
+        let pos = self.edit_body_cursor;
+        pos > 0 && pos - 1 < flags.len() && flags[pos - 1]
+    }
+
+    /// Toggles bold formatting on the current selection or, if no selection exists, on the
+    /// active character.
+    pub(crate) fn toggle_bold(&mut self, cx: &mut Context<Self>) {
+        self.toggle_text_style(TextStyleKind::Bold, cx);
+    }
+
+    /// Toggles one character style on the selection, or on the character at the caret.
+    pub(crate) fn toggle_text_style(&mut self, kind: TextStyleKind, cx: &mut Context<Self>) {
+        if !self.is_editing || self.active_field != ActiveField::Body {
+            return;
+        }
+
+        let char_count = self.edit_body.chars().count();
+        let cursor = self.edit_body_cursor;
+        let anchor = self.edit_body_anchor;
+        {
+            let flags = self.body_style_flags_mut(kind);
+            if flags.len() < char_count {
+                flags.resize(char_count, false);
+            }
+
+            if let Some((start, end)) = crate::text_selection::get_selection_range(cursor, anchor) {
+                let start = start.min(char_count);
+                let end = end.min(char_count);
+                if start < end {
+                    let all_on = flags[start..end].iter().all(|flag| *flag);
+                    let new_value = !all_on;
+                    for flag in &mut flags[start..end] {
+                        *flag = new_value;
+                    }
+                }
+            } else if cursor < char_count && cursor < flags.len() {
+                flags[cursor] = !flags[cursor];
+            } else if cursor > 0 && cursor - 1 < char_count && cursor - 1 < flags.len() {
+                flags[cursor - 1] = !flags[cursor - 1];
             }
         }
 

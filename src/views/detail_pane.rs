@@ -67,7 +67,7 @@ impl NotesApp {
                         .gap(px(8.0))
                         .child(
                             div()
-                                .text_size(px(11.0))
+                                .text_size(px(self.page_list_font_size))
                                 .text_color(if is_active {
                                     rgb(0xffffff)
                                 } else {
@@ -115,7 +115,7 @@ impl NotesApp {
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .rounded(px(4.0))
                             .cursor_pointer()
-                            .text_size(px(11.0))
+                            .text_size(px(self.page_list_font_size))
                             .on_click(cx.listener(|this, _, _, cx| {
                                 this.add_page(cx);
                             }))
@@ -137,7 +137,7 @@ impl NotesApp {
                     .gap(px(4.0))
                     .child(
                         div()
-                            .text_size(px(11.0))
+                            .text_size(px(self.page_list_font_size))
                             .text_color(rgb(0x808080))
                             .font_weight(gpui::FontWeight::BOLD)
                             .child("PAGES"),

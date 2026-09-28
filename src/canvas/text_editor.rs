@@ -13,10 +13,29 @@ pub struct TextEditor {
     pub focus_handle: FocusHandle,
     pub is_selecting: bool,
     pub cursor_visible: bool,
+    pub font_size: f32,
 }
 
 #[allow(dead_code)]
 impl TextEditor {
+    /// Computes the dynamic line height based on standardized font size.
+    #[inline]
+    pub fn line_height(&self) -> f32 {
+        crate::constants::typography::line_height_for_font_size(self.font_size)
+    }
+
+    /// Computes the dynamic cursor height based on standardized font size.
+    #[inline]
+    pub fn cursor_height(&self) -> f32 {
+        crate::constants::typography::cursor_height_for_font_size(self.font_size)
+    }
+
+    /// Computes the dynamic selection height based on standardized font size.
+    #[inline]
+    pub fn selection_height(&self) -> f32 {
+        crate::constants::typography::selection_height_for_font_size(self.font_size)
+    }
+
     /// Creates a new editor wrapper around a text value and binds it to a GPUI focus handle.
     pub fn new(text: String, cx: &mut Context<impl Focusable>) -> Self {
         let cursor = text.chars().count();
@@ -28,6 +47,7 @@ impl TextEditor {
             focus_handle: cx.focus_handle(),
             is_selecting: false,
             cursor_visible: true,
+            font_size: crate::constants::typography::CANVAS_BODY_FONT_SIZE,
         }
     }
 
@@ -302,6 +322,10 @@ impl TextEditor {
     {
         let text = self.text.as_str();
         let cursor_idx = self.cursor;
+        let font_size = self.font_size;
+        let line_height = self.line_height();
+        let cursor_height = self.cursor_height();
+        let sel_height = self.selection_height();
         let selection_range = self.selection();
 
         if text.is_empty() {
@@ -309,14 +333,15 @@ impl TextEditor {
                 .relative()
                 .flex()
                 .items_center()
-                .min_h(px(20.0))
+                .min_h(px(line_height))
+                .text_size(px(font_size))
                 .child(if is_focused {
                     div()
                         .absolute()
                         .left(px(0.0))
                         .top(px(2.0))
                         .w(px(2.0))
-                        .h(px(16.0))
+                        .h(px(cursor_height))
                         .bg(if self.cursor_visible {
                             rgb(0x0078d4)
                         } else {
@@ -325,7 +350,7 @@ impl TextEditor {
                 } else {
                     div()
                 })
-                .child(div().text_color(rgb(0x606060)).child("Type note..."));
+                .child(div().text_color(rgb(0x606060)).text_size(px(font_size)).child("Type note..."));
             return line_wrapper(0, 0, "", row).into_any_element();
         }
 
@@ -355,7 +380,8 @@ impl TextEditor {
                 .flex()
                 .flex_row()
                 .items_center()
-                .min_h(px(20.0));
+                .text_size(px(font_size))
+                .min_h(px(line_height));
 
             let has_sel_overlap = if let Some(ref sel) = selection_range {
                 let sel_overlap_start = sel.start.max(line_start);
@@ -385,6 +411,7 @@ impl TextEditor {
                             let disp = run.text.replace(' ', "\u{00A0}");
                             let el = div()
                                 .text_color(rgba(0x00000000))
+                                .text_size(px(font_size))
                                 .font_weight(if run.is_bold {
                                     gpui::FontWeight::BOLD
                                 } else {
@@ -401,6 +428,7 @@ impl TextEditor {
                             let disp = run.text.replace(' ', "\u{00A0}");
                             let el = div()
                                 .text_color(rgba(0x00000000))
+                                .text_size(px(font_size))
                                 .font_weight(if run.is_bold {
                                     gpui::FontWeight::BOLD
                                 } else {
@@ -423,7 +451,7 @@ impl TextEditor {
                                     div()
                                         .bg(rgb(0x0078d4))
                                         .rounded(px(2.0))
-                                        .h(px(18.0))
+                                        .h(px(sel_height))
                                         .flex()
                                         .items_center()
                                         .children(sel_ghosts),
@@ -436,7 +464,7 @@ impl TextEditor {
                                 .left(px(0.0))
                                 .top(px(1.0))
                                 .w(px(6.0))
-                                .h(px(18.0))
+                                .h(px(sel_height))
                                 .bg(rgb(0x0078d4))
                                 .rounded(px(2.0)),
                         );
@@ -451,6 +479,7 @@ impl TextEditor {
                 line_elements.push(
                     div()
                         .text_color(rgb(0xd4d4d4))
+                        .text_size(px(font_size))
                         .child("\u{00A0}")
                         .into_any_element(),
                 );
@@ -463,6 +492,7 @@ impl TextEditor {
                         } else {
                             rgb(0xd4d4d4)
                         })
+                        .text_size(px(font_size))
                         .font_weight(if run.is_bold {
                             gpui::FontWeight::BOLD
                         } else {
@@ -500,6 +530,7 @@ impl TextEditor {
                     let disp = run.text.replace(' ', "\u{00A0}");
                     let el = div()
                         .text_color(rgba(0x00000000))
+                        .text_size(px(font_size))
                         .font_weight(if run.is_bold {
                             gpui::FontWeight::BOLD
                         } else {
@@ -521,7 +552,7 @@ impl TextEditor {
                         .child(
                             div()
                                 .w(px(2.0))
-                                .h(px(16.0))
+                                .h(px(cursor_height))
                                 .bg(if self.cursor_visible {
                                     rgb(0x0078d4)
                                 } else {

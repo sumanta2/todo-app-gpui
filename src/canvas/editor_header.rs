@@ -7,7 +7,7 @@ use crate::constants::{
 };
 use crate::helpers::hash_str;
 use crate::models::{ActiveField, NoteContent};
-use crate::text_selection::{calculate_line_text_offset_weighted, calculate_text_width};
+use crate::text_selection::{calculate_line_text_offset_with_font, calculate_text_width_for_font};
 
 impl NotesApp {
     /// Renders the section-name input inline in the active tab.
@@ -172,11 +172,12 @@ impl NotesApp {
                         this.active_field = ActiveField::SectionName;
                         this.focus_handle.focus(window, cx);
                         let rel_x = (event.position.x.as_f32() - this.active_section_tab_x).max(0.0);
-                        let click_idx = calculate_line_text_offset_weighted(
+                        let click_idx = calculate_line_text_offset_with_font(
                             rel_x,
                             &this.edit_section_name,
                             this.section_name_font_size,
                             WEIGHT_BOLD,
+                            this.font_type(),
                         );
                         this.edit_section_name_cursor = click_idx;
                         this.edit_section_name_anchor = Some(click_idx);
@@ -189,11 +190,12 @@ impl NotesApp {
                 .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
                     if this.is_selecting_section_name {
                         let rel_x = (event.position.x.as_f32() - this.active_section_tab_x).max(0.0);
-                        let drag_idx = calculate_line_text_offset_weighted(
+                        let drag_idx = calculate_line_text_offset_with_font(
                             rel_x,
                             &this.edit_section_name,
                             this.section_name_font_size,
                             WEIGHT_BOLD,
+                            this.font_type(),
                         );
                         this.edit_section_name_cursor = drag_idx;
                         cx.notify();
@@ -304,7 +306,7 @@ impl NotesApp {
                 &sec.name
             };
             let weight = if is_active { WEIGHT_BOLD } else { WEIGHT_NORMAL };
-            let text_w = calculate_text_width(tab_text, self.section_name_font_size, weight);
+            let text_w = calculate_text_width_for_font(tab_text, self.section_name_font_size, weight, self.font_type());
             let mut tab_w = 12.0 + text_w;
             if content.sections.len() > 1 {
                 tab_w += 18.0;
@@ -554,11 +556,12 @@ impl NotesApp {
                         this.focus_handle.focus(window, cx);
                         let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
                         let rel_x = (event.position.x.as_f32() - sidebar_w - HEADING_PADDING_LEFT).max(0.0);
-                        let click_idx = calculate_line_text_offset_weighted(
+                        let click_idx = calculate_line_text_offset_with_font(
                             rel_x,
                             &this.edit_heading,
                             this.page_heading_font_size,
                             WEIGHT_NORMAL,
+                            this.font_type(),
                         );
                         this.edit_heading_cursor = click_idx;
                         this.edit_heading_anchor = Some(click_idx);
@@ -572,11 +575,12 @@ impl NotesApp {
                     if this.is_selecting_heading {
                         let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
                         let rel_x = (event.position.x.as_f32() - sidebar_w - HEADING_PADDING_LEFT).max(0.0);
-                        let drag_idx = calculate_line_text_offset_weighted(
+                        let drag_idx = calculate_line_text_offset_with_font(
                             rel_x,
                             &this.edit_heading,
                             this.page_heading_font_size,
                             WEIGHT_NORMAL,
+                            this.font_type(),
                         );
                         this.edit_heading_cursor = drag_idx;
                         cx.notify();

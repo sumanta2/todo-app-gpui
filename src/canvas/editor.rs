@@ -6,7 +6,7 @@ use crate::constants::{
     typography::{WEIGHT_BOLD, WEIGHT_NORMAL},
 };
 use crate::models::{ActiveField, CanvasItem, Note, NoteContent, TextItem};
-use crate::text_selection::{calculate_canvas_drag_offset, calculate_line_text_offset_weighted};
+use crate::text_selection::{calculate_canvas_drag_offset_full, calculate_line_text_offset_with_font};
 
 impl NotesApp {
     /// Renders the editable note canvas and its surrounding controls.
@@ -133,8 +133,7 @@ impl NotesApp {
                             let item_x = tx.x;
                             let item_y = tx.y;
                             let item_w = tx.width.unwrap_or(250.0);
-                            let anchor = this.edit_body_anchor.unwrap_or(this.edit_body_cursor);
-                            let drag_idx = calculate_canvas_drag_offset(
+                            let drag_idx = calculate_canvas_drag_offset_full(
                                 event.position,
                                 this.is_sidebar_open,
                                 this.pan_x,
@@ -143,8 +142,10 @@ impl NotesApp {
                                 item_y,
                                 this.canvas_top_y,
                                 &this.edit_body,
-                                anchor,
+                                Some(&this.edit_body_bold),
                                 item_w,
+                                this.canvas_body_font_size,
+                                this.font_type(),
                             );
                             this.edit_body_cursor = drag_idx;
                             changed = true;
@@ -153,21 +154,23 @@ impl NotesApp {
                 } else if this.is_selecting_heading {
                     let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
                     let rel_x = (event.position.x.as_f32() - sidebar_w - HEADING_PADDING_LEFT).max(0.0);
-                    let drag_idx = calculate_line_text_offset_weighted(
+                    let drag_idx = calculate_line_text_offset_with_font(
                         rel_x,
                         &this.edit_heading,
                         this.page_heading_font_size,
                         WEIGHT_NORMAL,
+                        this.font_type(),
                     );
                     this.edit_heading_cursor = drag_idx;
                     changed = true;
                 } else if this.is_selecting_section_name {
                     let rel_x = (event.position.x.as_f32() - this.active_section_tab_x).max(0.0);
-                    let drag_idx = calculate_line_text_offset_weighted(
+                    let drag_idx = calculate_line_text_offset_with_font(
                         rel_x,
                         &this.edit_section_name,
                         this.section_name_font_size,
                         WEIGHT_BOLD,
+                        this.font_type(),
                     );
                     this.edit_section_name_cursor = drag_idx;
                     changed = true;

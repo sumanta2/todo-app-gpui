@@ -71,6 +71,9 @@ impl NotesApp {
             note_heading_font_size: crate::constants::typography::NOTE_HEADING_FONT_SIZE,
             section_name_font_size: crate::constants::typography::SECTION_NAME_FONT_SIZE,
             page_heading_font_size: crate::constants::typography::PAGE_HEADING_FONT_SIZE,
+            canvas_body_font_size: crate::constants::typography::CANVAS_BODY_FONT_SIZE,
+            page_list_font_size: crate::constants::typography::PAGE_LIST_FONT_SIZE,
+            font_family: crate::constants::typography::DEFAULT_FONT_FAMILY.to_string(),
         };
 
         // Keep the Cursor blinking by toggling visibility every 500 ms and re-rendering.
@@ -593,6 +596,48 @@ impl NotesApp {
     #[allow(dead_code)]
     pub(crate) fn set_page_heading_font_size(&mut self, size: f32) {
         self.page_heading_font_size = size;
+    }
+
+    /// Updates the font size used for canvas text blocks.
+    #[allow(dead_code)]
+    pub(crate) fn set_canvas_body_font_size(&mut self, size: f32) {
+        self.canvas_body_font_size = size;
+    }
+
+    /// Updates the font size used for items in the page sidebar list.
+    #[allow(dead_code)]
+    pub(crate) fn set_page_list_font_size(&mut self, size: f32) {
+        self.page_list_font_size = size;
+    }
+
+    /// Updates the global font family and updates associated metrics.
+    #[allow(dead_code)]
+    pub(crate) fn set_font_family(&mut self, family: impl Into<String>) {
+        self.font_family = family.into();
+    }
+
+    /// Returns the active FontType inferred from the currently configured font family.
+    #[inline]
+    pub(crate) fn font_type(&self) -> crate::constants::typography::FontType {
+        crate::constants::typography::FontType::from_family_name(&self.font_family)
+    }
+
+    /// Computes the visual line height for canvas text blocks at current standardized font size.
+    #[inline]
+    pub(crate) fn canvas_line_height(&self) -> f32 {
+        crate::constants::typography::line_height_for_font_size(self.canvas_body_font_size)
+    }
+
+    /// Computes the cursor indicator height for canvas text blocks at current standardized font size.
+    #[inline]
+    pub(crate) fn canvas_cursor_height(&self) -> f32 {
+        crate::constants::typography::cursor_height_for_font_size(self.canvas_body_font_size)
+    }
+
+    /// Computes the selection highlight height for canvas text blocks at current standardized font size.
+    #[inline]
+    pub(crate) fn canvas_selection_height(&self) -> f32 {
+        crate::constants::typography::selection_height_for_font_size(self.canvas_body_font_size)
     }
 }
 

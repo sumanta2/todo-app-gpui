@@ -3,7 +3,7 @@ use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, Mou
 use crate::app::NotesApp;
 use crate::constants::{layout::NOTE_ITEM_TEXT_OFFSET_X, typography::WEIGHT_SEMIBOLD};
 use crate::models::ActiveField;
-use crate::text_selection::{calculate_line_text_offset_weighted, get_selection_range};
+use crate::text_selection::{calculate_line_text_offset_with_font, get_selection_range};
 
 impl NotesApp {
     /// Renders the left sidebar containing note navigation and note-creation actions.
@@ -266,11 +266,12 @@ impl NotesApp {
                                                                         ActiveField::NoteHeading;
                                                                     this.focus_handle.focus(window, cx);
                                                                     let rel_x = (event.position.x.as_f32() - NOTE_ITEM_TEXT_OFFSET_X).max(0.0);
-                                                                    let click_idx = calculate_line_text_offset_weighted(
+                                                                    let click_idx = calculate_line_text_offset_with_font(
                                                                         rel_x,
                                                                         &this.edit_note_heading,
                                                                         this.note_heading_font_size,
                                                                         WEIGHT_SEMIBOLD,
+                                                                        this.font_type(),
                                                                     );
                                                                     this.edit_note_heading_cursor = click_idx;
                                                                     this.edit_note_heading_anchor = Some(click_idx);
@@ -283,11 +284,12 @@ impl NotesApp {
                                                             .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
                                                                 if this.is_selecting_note_heading {
                                                                     let rel_x = (event.position.x.as_f32() - NOTE_ITEM_TEXT_OFFSET_X).max(0.0);
-                                                                    let drag_idx = calculate_line_text_offset_weighted(
+                                                                    let drag_idx = calculate_line_text_offset_with_font(
                                                                         rel_x,
                                                                         &this.edit_note_heading,
                                                                         this.note_heading_font_size,
                                                                         WEIGHT_SEMIBOLD,
+                                                                        this.font_type(),
                                                                     );
                                                                     this.edit_note_heading_cursor = drag_idx;
                                                                     cx.notify();

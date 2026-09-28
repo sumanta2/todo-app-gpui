@@ -4,7 +4,8 @@ use std::sync::Arc;
 use crate::app::NotesApp;
 use crate::models::{ActiveField, CanvasItem};
 use crate::text_selection::{
-    calculate_canvas_drag_offset, calculate_canvas_text_offset,
+    calculate_canvas_drag_offset_full, calculate_canvas_text_offset_full,
+    calculate_line_text_offset_with_bold_and_font,
 };
 
 impl NotesApp {
@@ -144,6 +145,7 @@ impl NotesApp {
                             focus_handle: self.focus_handle.clone(),
                             is_selecting: self.is_selecting_body,
                             cursor_visible: self.cursor_visible,
+                            font_size: self.canvas_body_font_size,
                         };
 
                         let t_id_for_down_left = t_id_clone.clone();
@@ -192,11 +194,12 @@ impl NotesApp {
                                         } else {
                                             None
                                         };
-                                        let local_idx = crate::text_selection::calculate_line_text_offset_with_bold(
+                                        let local_idx = calculate_line_text_offset_with_bold_and_font(
                                             rel_x,
                                             &line_str_owned,
                                             line_flags,
-                                            12.0,
+                                            this.canvas_body_font_size,
+                                            this.font_type(),
                                         );
                                         let click_idx = (line_start + local_idx).min(this.edit_body.chars().count());
 
@@ -215,7 +218,7 @@ impl NotesApp {
                             div()
                                 .id(("text-content", id_num))
                                 .p(px(5.0))
-                                .text_size(px(12.0))
+                                .text_size(px(self.canvas_body_font_size))
                                 .cursor_text()
                                 .on_mouse_down(
                                     MouseButton::Left,
@@ -232,12 +235,7 @@ impl NotesApp {
                                             let (item_x, item_y) = if let Some(CanvasItem::Text(tx)) = this
                                                 .edit_canvas_items
                                                 .iter()
-                                                .find(|item| match item {
-                                                    CanvasItem::Text(blk) => {
-                                                        blk.id == t_id_for_down_left
-                                                    }
-                                                    _ => false,
-                                                })
+                                                .find(|item| matches!(item, CanvasItem::Text(blk) if blk.id == t_id_for_down_left))
                                             {
                                                 this.edit_body = tx.text.clone();
                                                 this.edit_body_bold = crate::helpers::spans_to_bool_vec(
@@ -248,7 +246,7 @@ impl NotesApp {
                                             } else {
                                                 t_pos
                                             };
-                                            let click_idx = calculate_canvas_text_offset(
+                                            let click_idx = calculate_canvas_text_offset_full(
                                                 event.position,
                                                 this.is_sidebar_open,
                                                 this.pan_x,
@@ -257,7 +255,12 @@ impl NotesApp {
                                                 item_y,
                                                 this.canvas_top_y,
                                                 &this.edit_body,
+                                                Some(&this.edit_body_bold),
+                                                6.0,
+                                                18.0,
                                                 textbox_width,
+                                                this.canvas_body_font_size,
+                                                this.font_type(),
                                             );
                                             this.edit_body_cursor = click_idx;
                                             this.edit_body_anchor = Some(click_idx);
@@ -283,12 +286,7 @@ impl NotesApp {
                                             let (item_x, item_y) = if let Some(CanvasItem::Text(tx)) = this
                                                 .edit_canvas_items
                                                 .iter()
-                                                .find(|item| match item {
-                                                    CanvasItem::Text(blk) => {
-                                                        blk.id == t_id_for_down_right
-                                                    }
-                                                    _ => false,
-                                                })
+                                                .find(|item| matches!(item, CanvasItem::Text(blk) if blk.id == t_id_for_down_right))
                                             {
                                                 this.edit_body = tx.text.clone();
                                                 this.edit_body_bold = crate::helpers::spans_to_bool_vec(
@@ -299,7 +297,7 @@ impl NotesApp {
                                             } else {
                                                 t_pos
                                             };
-                                            let click_idx = calculate_canvas_text_offset(
+                                            let click_idx = calculate_canvas_text_offset_full(
                                                 event.position,
                                                 this.is_sidebar_open,
                                                 this.pan_x,
@@ -308,7 +306,12 @@ impl NotesApp {
                                                 item_y,
                                                 this.canvas_top_y,
                                                 &this.edit_body,
+                                                Some(&this.edit_body_bold),
+                                                6.0,
+                                                18.0,
                                                 textbox_width,
+                                                this.canvas_body_font_size,
+                                                this.font_type(),
                                             );
                                             this.edit_body_cursor = click_idx;
                                             this.edit_body_anchor = Some(click_idx);
@@ -334,10 +337,7 @@ impl NotesApp {
                                             } else {
                                                 (t_pos_move.0, t_pos_move.1, textbox_width)
                                             };
-                                            let anchor = this
-                                                .edit_body_anchor
-                                                .unwrap_or(this.edit_body_cursor);
-                                            let drag_idx = calculate_canvas_drag_offset(
+                                            let drag_idx = calculate_canvas_drag_offset_full(
                                                 event.position,
                                                 this.is_sidebar_open,
                                                 this.pan_x,
@@ -346,8 +346,10 @@ impl NotesApp {
                                                 item_y,
                                                 this.canvas_top_y,
                                                 &this.edit_body,
-                                                anchor,
+                                                Some(&this.edit_body_bold),
                                                 item_w,
+                                                this.canvas_body_font_size,
+                                                this.font_type(),
                                             );
                                             this.edit_body_cursor = drag_idx;
                                             cx.notify();
@@ -443,7 +445,7 @@ impl NotesApp {
 
                             let line_el = div()
                                 .id(("inactive-line-row", id_num.wrapping_add(line_idx)))
-                                .min_h(px(20.0))
+                                .min_h(px(self.canvas_line_height()))
                                 .flex()
                                 .items_center()
                                 .children(line_runs_els)
@@ -485,11 +487,12 @@ impl NotesApp {
                                         } else {
                                             None
                                         };
-                                        let local_idx = crate::text_selection::calculate_line_text_offset_with_bold(
+                                        let local_idx = calculate_line_text_offset_with_bold_and_font(
                                             rel_x,
                                             &line_str_owned,
                                             line_flags,
-                                            12.0,
+                                            this.canvas_body_font_size,
+                                            this.font_type(),
                                         );
                                         let click_idx = (line_start + local_idx).min(this.edit_body.chars().count());
 
@@ -510,7 +513,7 @@ impl NotesApp {
                             div()
                                 .id(("text-content", id_num))
                                 .p(px(5.0))
-                                .text_size(px(12.0))
+                                .text_size(px(self.canvas_body_font_size))
                                 .cursor_text()
                                 .on_mouse_down(
                                     MouseButton::Left,
@@ -527,12 +530,7 @@ impl NotesApp {
                                             let (item_x, item_y) = if let Some(CanvasItem::Text(tx)) = this
                                                 .edit_canvas_items
                                                 .iter()
-                                                .find(|item| match item {
-                                                    CanvasItem::Text(blk) => {
-                                                        blk.id == t_id_for_inactive_left
-                                                    }
-                                                    _ => false,
-                                                })
+                                                .find(|item| matches!(item, CanvasItem::Text(blk) if blk.id == t_id_for_inactive_left))
                                             {
                                                 this.edit_body = tx.text.clone();
                                                 this.edit_body_bold = crate::helpers::spans_to_bool_vec(
@@ -543,7 +541,7 @@ impl NotesApp {
                                             } else {
                                                 t_pos
                                             };
-                                            let click_idx = calculate_canvas_text_offset(
+                                            let click_idx = calculate_canvas_text_offset_full(
                                                 event.position,
                                                 this.is_sidebar_open,
                                                 this.pan_x,
@@ -552,7 +550,12 @@ impl NotesApp {
                                                 item_y,
                                                 this.canvas_top_y,
                                                 &this.edit_body,
+                                                Some(&this.edit_body_bold),
+                                                6.0,
+                                                18.0,
                                                 textbox_width,
+                                                this.canvas_body_font_size,
+                                                this.font_type(),
                                             );
                                             this.edit_body_cursor = click_idx;
                                             this.edit_body_anchor = Some(click_idx);
@@ -578,12 +581,7 @@ impl NotesApp {
                                             let (item_x, item_y) = if let Some(CanvasItem::Text(tx)) = this
                                                 .edit_canvas_items
                                                 .iter()
-                                                .find(|item| match item {
-                                                    CanvasItem::Text(blk) => {
-                                                        blk.id == t_id_for_inactive_right
-                                                    }
-                                                    _ => false,
-                                                })
+                                                .find(|item| matches!(item, CanvasItem::Text(blk) if blk.id == t_id_for_inactive_right))
                                             {
                                                 this.edit_body = tx.text.clone();
                                                 this.edit_body_bold = crate::helpers::spans_to_bool_vec(
@@ -594,7 +592,7 @@ impl NotesApp {
                                             } else {
                                                 t_pos
                                             };
-                                            let click_idx = calculate_canvas_text_offset(
+                                            let click_idx = calculate_canvas_text_offset_full(
                                                 event.position,
                                                 this.is_sidebar_open,
                                                 this.pan_x,
@@ -603,7 +601,12 @@ impl NotesApp {
                                                 item_y,
                                                 this.canvas_top_y,
                                                 &this.edit_body,
+                                                Some(&this.edit_body_bold),
+                                                6.0,
+                                                18.0,
                                                 textbox_width,
+                                                this.canvas_body_font_size,
+                                                this.font_type(),
                                             );
                                             this.edit_body_cursor = click_idx;
                                             this.edit_body_anchor = Some(click_idx);

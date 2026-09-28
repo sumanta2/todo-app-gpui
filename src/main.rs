@@ -3,6 +3,7 @@
 mod app;
 mod canvas;
 mod constants;
+mod font_metrics;
 mod helpers;
 mod models;
 mod text_selection;
@@ -35,7 +36,7 @@ impl Render for NotesApp {
             .size_full()
             .bg(rgb(0x1e1e1e))
             .text_color(rgb(0xd4d4d4))
-            .font_family("Segoe UI")
+            .font_family(self.font_family.as_str())
             .child(sidebar)
             .child(detail_pane)
     }

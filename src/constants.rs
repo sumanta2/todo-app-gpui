@@ -6,6 +6,45 @@
 
 #[allow(dead_code)]
 pub(crate) mod typography {
+    /// Default application font family name.
+    pub(crate) const DEFAULT_FONT_FAMILY: &str = "Segoe UI";
+
+    /// Font categories supported by the application text engine.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub(crate) enum FontType {
+        SegoeUI,
+        Arial,
+        Monospace,
+        Serif,
+        Calibri,
+        Inter,
+    }
+
+    impl FontType {
+        /// Infers the font category from a font family name string.
+        pub(crate) fn from_family_name(name: &str) -> Self {
+            let lower = name.to_ascii_lowercase();
+            if lower.contains("consolas")
+                || lower.contains("mono")
+                || lower.contains("courier")
+                || lower.contains("cascadia")
+                || lower.contains("code")
+            {
+                FontType::Monospace
+            } else if lower.contains("arial") || lower.contains("helvetica") {
+                FontType::Arial
+            } else if lower.contains("times") || lower.contains("georgia") || lower.contains("serif") {
+                FontType::Serif
+            } else if lower.contains("calibri") {
+                FontType::Calibri
+            } else if lower.contains("inter") || lower.contains("roboto") {
+                FontType::Inter
+            } else {
+                FontType::SegoeUI
+            }
+        }
+    }
+
     /// Font size for notebook/note headings in the sidebar (default: 14.0px).
     pub(crate) const NOTE_HEADING_FONT_SIZE: f32 = 14.0;
 
@@ -25,6 +64,24 @@ pub(crate) mod typography {
     pub(crate) const WEIGHT_NORMAL: f32 = 1.00;
     pub(crate) const WEIGHT_SEMIBOLD: f32 = 1.05;
     pub(crate) const WEIGHT_BOLD: f32 = 1.10;
+
+    /// Computes the visual line height for a given font size.
+    #[inline]
+    pub(crate) fn line_height_for_font_size(font_size: f32) -> f32 {
+        font_size + 8.0
+    }
+
+    /// Computes the cursor indicator height for a given font size.
+    #[inline]
+    pub(crate) fn cursor_height_for_font_size(font_size: f32) -> f32 {
+        font_size + 4.0
+    }
+
+    /// Computes the selection highlight height for a given font size.
+    #[inline]
+    pub(crate) fn selection_height_for_font_size(font_size: f32) -> f32 {
+        font_size + 6.0
+    }
 }
 
 #[allow(dead_code)]

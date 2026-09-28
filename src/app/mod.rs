@@ -88,9 +88,12 @@ pub struct NotesApp {
     pub(crate) cursor_visible: bool,
 
     // Standardized Typography Configuration
+    pub(crate) font_family: String,
     pub(crate) note_heading_font_size: f32,
     pub(crate) section_name_font_size: f32,
     pub(crate) page_heading_font_size: f32,
+    pub(crate) canvas_body_font_size: f32,
+    pub(crate) page_list_font_size: f32,
 }
 
 impl Focusable for NotesApp {

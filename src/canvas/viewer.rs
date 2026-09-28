@@ -7,7 +7,7 @@ use crate::app::NotesApp;
 use crate::helpers::hash_str;
 use crate::models::{load_canvas_items, CanvasItem, Note, NoteContent};
 use crate::text_selection::{
-    calculate_canvas_drag_offset_with_bold, calculate_canvas_text_offset_with_header_and_bold,
+    calculate_canvas_text_offset_full, calculate_line_text_offset_with_bold_and_font,
 };
 
 impl NotesApp {
@@ -94,7 +94,7 @@ impl NotesApp {
                             .flex()
                             .flex_row()
                             .items_center()
-                            .min_h(px(20.0));
+                            .min_h(px(self.canvas_line_height()));
 
                         let has_sel_overlap = if has_sel {
                             let sel_overlap_start = sel_start.max(line_global_start);
@@ -179,7 +179,7 @@ impl NotesApp {
                                             div()
                                                 .bg(rgb(0x0078d4))
                                                 .rounded(px(2.0))
-                                                .h(px(18.0))
+                                                .h(px(self.canvas_selection_height()))
                                                 .flex()
                                                 .items_center()
                                                 .children(sel_ghosts),
@@ -195,7 +195,7 @@ impl NotesApp {
                                         .left(px(0.0))
                                         .top(px(1.0))
                                         .w(px(6.0))
-                                        .h(px(18.0))
+                                        .h(px(self.canvas_selection_height()))
                                         .bg(rgb(0x0078d4))
                                         .rounded(px(2.0)),
                                 );
@@ -284,7 +284,7 @@ impl NotesApp {
                                     .child(
                                         div()
                                             .w(px(2.0))
-                                            .h(px(16.0))
+                                            .h(px(self.canvas_cursor_height()))
                                             .bg(if show_caret {
                                                 rgb(0x0078d4)
                                             } else {
@@ -323,11 +323,12 @@ impl NotesApp {
                                             - 5.0)
                                             .max(0.0);
                                         let local_idx =
-                                        crate::text_selection::calculate_line_text_offset_with_bold(
+                                        calculate_line_text_offset_with_bold_and_font(
                                             rel_x,
                                             &line_str_owned,
                                             Some(&line_flags_for_click),
-                                            12.0,
+                                            this.canvas_body_font_size,
+                                            this.font_type(),
                                         );
                                         let click_idx =
                                             (line_global_start + local_idx).min(total_chars);
@@ -356,7 +357,7 @@ impl NotesApp {
                         .top(px(item_y + self.pan_y))
                         .w(px(item_w))
                         .p(px(5.0))
-                        .text_size(px(12.0))
+                        .text_size(px(self.canvas_body_font_size))
                         .text_color(rgb(0xd4d4d4))
                         .cursor_text()
                         .on_mouse_down(
@@ -368,7 +369,7 @@ impl NotesApp {
                                 this.pan_start_val = None;
                                 this.viewer_active_text_block_id = Some(t_id_down.clone());
 
-                                let click_idx = calculate_canvas_text_offset_with_header_and_bold(
+                                let click_idx = calculate_canvas_text_offset_full(
                                     event.position,
                                     this.is_sidebar_open,
                                     this.pan_x,
@@ -381,6 +382,8 @@ impl NotesApp {
                                     5.0,
                                     5.0,
                                     item_w,
+                                    this.canvas_body_font_size,
+                                    this.font_type(),
                                 );
                                 this.viewer_text_cursor = click_idx;
                                 this.viewer_text_anchor = Some(click_idx);
@@ -395,10 +398,7 @@ impl NotesApp {
                                 if this.is_selecting_viewer_text {
                                     if let Some(ref active_id) = this.viewer_active_text_block_id {
                                         if active_id == &t_id {
-                                            let anchor = this
-                                                .viewer_text_anchor
-                                                .unwrap_or(this.viewer_text_cursor);
-                                            let drag_idx = calculate_canvas_drag_offset_with_bold(
+                                            let drag_idx = calculate_canvas_text_offset_full(
                                                 event.position,
                                                 this.is_sidebar_open,
                                                 this.pan_x,
@@ -408,10 +408,11 @@ impl NotesApp {
                                                 this.canvas_top_y,
                                                 &text_content,
                                                 Some(&bold_flags_move),
-                                                anchor,
                                                 5.0,
                                                 5.0,
                                                 item_w,
+                                                this.canvas_body_font_size,
+                                                this.font_type(),
                                             );
                                             this.viewer_text_cursor = drag_idx;
                                             cx.notify();
@@ -562,14 +563,12 @@ impl NotesApp {
                                 let item_x = tx.x;
                                 let item_y = tx.y;
                                 let item_w = tx.width.unwrap_or(250.0);
-                                let anchor =
-                                    this.viewer_text_anchor.unwrap_or(this.viewer_text_cursor);
                                 let tx_total_chars = tx.text.chars().count();
                                 let bold_flags = crate::helpers::spans_to_bool_vec(
                                     &tx.bold_spans,
                                     tx_total_chars,
                                 );
-                                let drag_idx = calculate_canvas_drag_offset_with_bold(
+                                let drag_idx = calculate_canvas_text_offset_full(
                                     event.position,
                                     this.is_sidebar_open,
                                     this.pan_x,
@@ -579,10 +578,11 @@ impl NotesApp {
                                     this.canvas_top_y,
                                     &tx.text,
                                     Some(&bold_flags),
-                                    anchor,
                                     5.0,
                                     5.0,
                                     item_w,
+                                    this.canvas_body_font_size,
+                                    this.font_type(),
                                 );
                                 this.viewer_text_cursor = drag_idx;
                                 cx.notify();

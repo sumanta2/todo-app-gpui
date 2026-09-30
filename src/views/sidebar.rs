@@ -297,8 +297,12 @@ impl NotesApp {
                                                                         WEIGHT_SEMIBOLD,
                                                                         this.font_type(),
                                                                     );
-                                                                    this.edit_note_heading_cursor = drag_idx;
-                                                                    cx.notify();
+                                                                    if crate::text::selection::assign_if_changed(
+                                                                        &mut this.edit_note_heading_cursor,
+                                                                        drag_idx,
+                                                                    ) {
+                                                                        cx.notify();
+                                                                    }
                                                                     cx.stop_propagation();
                                                                 }
                                                             }))

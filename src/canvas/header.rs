@@ -202,8 +202,12 @@ impl NotesApp {
                             WEIGHT_BOLD,
                             this.font_type(),
                         );
-                        this.edit_section_name_cursor = drag_idx;
-                        cx.notify();
+                        if crate::text::selection::assign_if_changed(
+                            &mut this.edit_section_name_cursor,
+                            drag_idx,
+                        ) {
+                            cx.notify();
+                        }
                         cx.stop_propagation();
                     }
                 }))
@@ -569,7 +573,11 @@ impl NotesApp {
                         this.active_field = ActiveField::Heading;
                         this.focus_handle.focus(window, cx);
                         let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
-                        let rel_x = (event.position.x.as_f32() - sidebar_w - HEADING_PADDING_LEFT).max(0.0);
+                        let rel_x = (event.position.x.as_f32()
+                            - sidebar_w
+                            - HEADING_PADDING_LEFT
+                            - this.pan_x)
+                            .max(0.0);
                         let click_idx = calculate_line_text_offset_with_font(
                             rel_x,
                             &this.edit_heading,
@@ -588,7 +596,11 @@ impl NotesApp {
                 .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
                     if this.is_selecting_heading {
                         let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
-                        let rel_x = (event.position.x.as_f32() - sidebar_w - HEADING_PADDING_LEFT).max(0.0);
+                        let rel_x = (event.position.x.as_f32()
+                            - sidebar_w
+                            - HEADING_PADDING_LEFT
+                            - this.pan_x)
+                            .max(0.0);
                         let drag_idx = calculate_line_text_offset_with_font(
                             rel_x,
                             &this.edit_heading,
@@ -596,8 +608,9 @@ impl NotesApp {
                             WEIGHT_NORMAL,
                             this.font_type(),
                         );
-                        this.edit_heading_cursor = drag_idx;
-                        cx.notify();
+                        if crate::text::selection::assign_if_changed(&mut this.edit_heading_cursor, drag_idx) {
+                            cx.notify();
+                        }
                         cx.stop_propagation();
                     }
                 }))

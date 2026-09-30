@@ -3,7 +3,9 @@
 use gpui::Context;
 
 use crate::app::NotesApp;
-use crate::models::{load_canvas_items, load_note_content, ActiveField, CanvasItem};
+use crate::models::{
+    load_canvas_items, load_note_content, ActiveField, CanvasItem, ContentBlock, TextItem,
+};
 
 impl NotesApp {
     /// Called by GPUI when the app window is created during startup in main().
@@ -35,8 +37,20 @@ impl NotesApp {
             edit_body_italic: Vec::new(),
             edit_body_underline: Vec::new(),
             edit_body_strike: Vec::new(),
+            body_layout_stamp: 0,
+            body_hit_cache: None,
+            viewer_hit_cache: None,
+            viewer_hit_cache_id: None,
+            body_selection_overlay: std::cell::RefCell::new(None),
+            viewer_selection_overlay: std::cell::RefCell::new(None),
+            selection_drag_sample: None,
+            selection_drag_queued: false,
+            body_drag_origin: None,
+            viewer_drag_origin: None,
             edit_canvas_items: Vec::new(),
             active_text_block_id: None,
+            pending_caret: None,
+            hovered_canvas_item_id: None,
             drag_item_id: None,
             drag_start_mouse: None,
             drag_start_item_pos: None,
@@ -91,8 +105,24 @@ impl NotesApp {
                         .await;
                     if this
                         .update(&mut cx, |this, cx| {
+                            // The caret is only painted while editing or while a viewer block is active.
+                            // Idle view mode has nothing to blink, so skip the full-window rebuild.
+                            let caret_shown =
+                                this.is_editing || this.viewer_active_text_block_id.is_some();
+                            if !caret_shown {
+                                return;
+                            }
                             this.cursor_visible = !this.cursor_visible;
-                            cx.notify();
+                            this.refresh_body_selection(cx, false);
+                            this.refresh_viewer_selection(cx, false);
+                            // The floating caret is part of the main canvas, so it needs a full redraw.
+                            if this.pending_caret.is_some()
+                                && this.is_editing
+                                && this.active_field == ActiveField::Body
+                                && this.active_text_block_id.is_none()
+                            {
+                                cx.notify();
+                            }
                         })
                         .is_err()
                     {
@@ -146,6 +176,7 @@ impl NotesApp {
 
                 self.is_selecting_heading = false;
                 self.active_text_block_id = None;
+                self.pending_caret = None;
                 self.active_block_index = None;
                 self.edit_body = String::new();
                 self.reset_body_styles();
@@ -190,13 +221,13 @@ impl NotesApp {
                 let edit_body_strike = self.edit_body_strike.clone();
                 let active_block_index = self.active_block_index;
 
-                let max_line_len = edit_body
-                    .lines()
-                    .map(|line| line.chars().count())
-                    .max()
-                    .unwrap_or(0);
-                let line_text_w = max_line_len as f32 * 7.0;
-                let needed_width = line_text_w + 20.0;
+                let line_text_w = crate::text::selection::max_text_advance(
+                    &edit_body,
+                    Some(&edit_body_bold),
+                    self.canvas_body_font_size,
+                    self.font_type(),
+                );
+                let needed_width = line_text_w + 24.0;
                 let sidebar_w = if is_sidebar_open { 220.0 } else { 44.0 };
                 let page_sidebar_w = 180.0;
                 let canvas_visible_w =
@@ -255,6 +286,9 @@ impl NotesApp {
                 }
             }
         }
+        if self.active_field == ActiveField::Body {
+            self.ensure_body_hit_cache();
+        }
     }
 
     /// Persists the current note edit session back to the selected note object.
@@ -284,6 +318,7 @@ impl NotesApp {
                 }
 
                 self.is_editing = false;
+                self.pending_caret = None;
                 self.save_notes();
                 cx.notify();
             }
@@ -293,6 +328,248 @@ impl NotesApp {
     /// Exits edit mode without saving changes to the note payload.
     pub(crate) fn cancel_edit(&mut self, cx: &mut Context<Self>) {
         self.is_editing = false;
+        self.pending_caret = None;
         cx.notify();
     }
+
+    /// Drops text boxes that have no visible characters so a later click can start clean.
+    pub(crate) fn discard_empty_text_items(&mut self) {
+        let active = self.active_text_block_id.clone();
+        self.edit_canvas_items.retain(|item| match item {
+            CanvasItem::Text(t) => !t.text.trim().is_empty(),
+            CanvasItem::Mixed(m) => m.blocks.iter().any(|block| match block {
+                ContentBlock::Image { .. } => true,
+                ContentBlock::Text { text, .. } => !text.trim().is_empty(),
+            }),
+            CanvasItem::Image(_) => true,
+        });
+        if let Some(id) = active {
+            let still_there = self.edit_canvas_items.iter().any(|item| match item {
+                CanvasItem::Text(t) => t.id == id,
+                CanvasItem::Mixed(m) => m.id == id,
+                CanvasItem::Image(_) => false,
+            });
+            if !still_there {
+                self.active_text_block_id = None;
+                self.active_block_index = None;
+                self.edit_body.clear();
+                self.reset_body_styles();
+                self.edit_body_cursor = 0;
+                self.edit_body_anchor = None;
+            }
+        }
+    }
+
+    /// Parks a blinking caret at the click. No text box is created until the user types.
+    pub(crate) fn arm_pending_caret(&mut self, click_x: f32, click_y: f32) {
+        let x = click_x.max(TEXT_BOX_CHROME_X);
+        let y = click_y.max(TEXT_BOX_TEXT_TOP + TEXT_CARET_NUDGE_Y);
+        self.pending_caret = Some((x, y));
+        self.active_text_block_id = None;
+        self.active_block_index = None;
+        self.edit_body.clear();
+        self.reset_body_styles();
+        self.edit_body_cursor = 0;
+        self.edit_body_anchor = None;
+        self.is_selecting_body = false;
+        self.active_field = ActiveField::Body;
+        self.cursor_visible = true;
+    }
+
+    /// Creates the text box for a caret that was waiting for the first typed character.
+    pub(crate) fn materialize_pending_caret(&mut self) {
+        let Some((caret_x, caret_y)) = self.pending_caret.take() else {
+            return;
+        };
+        let x = (caret_x - TEXT_BOX_CHROME_X).max(0.0);
+        let y = (caret_y - TEXT_BOX_TEXT_TOP - TEXT_CARET_NUDGE_Y).max(0.0);
+        let new_id = chrono::Local::now().timestamp_millis().to_string();
+        self.edit_canvas_items.push(CanvasItem::Text(TextItem {
+            id: new_id.clone(),
+            x,
+            y,
+            text: String::new(),
+            width: Some(250.0),
+            bold_spans: Vec::new(),
+            italic_spans: Vec::new(),
+            underline_spans: Vec::new(),
+            strike_spans: Vec::new(),
+        }));
+        self.active_text_block_id = Some(new_id);
+        self.active_block_index = None;
+        self.edit_body.clear();
+        self.reset_body_styles();
+        self.edit_body_cursor = 0;
+        self.edit_body_anchor = None;
+        self.active_field = ActiveField::Body;
+        self.cursor_visible = true;
+    }
+
+    /// Moves into an existing text box and puts the caret at the end of the line under the click.
+    pub(crate) fn focus_text_line_at_click(
+        &mut self,
+        id: &str,
+        block_index: Option<usize>,
+        click_y: f32,
+        text_top: f32,
+    ) {
+        self.pending_caret = None;
+        self.sync_active_text_block();
+        self.active_text_block_id = Some(id.to_string());
+        self.active_block_index = block_index;
+        self.active_field = ActiveField::Body;
+        if self.capture_segment(id, block_index).is_none() {
+            return;
+        }
+        self.edit_body_cursor = end_of_line_at(&self.edit_body, text_top, click_y, self.canvas_line_height());
+        self.edit_body_anchor = None;
+        self.is_selecting_body = false;
+        self.cursor_visible = true;
+        self.ensure_body_hit_cache();
+    }
+
+    /// A text box whose rectangle contains the click, if one exists.
+    ///
+    /// Empty canvas beside a box is not a hit. The third value is the y of the first text line,
+    /// used to choose which line the caret joins.
+    pub(crate) fn text_target_at(&self, click_x: f32, click_y: f32) -> Option<(String, Option<usize>, f32)> {
+        let line_h = self.canvas_line_height();
+
+        for item in &self.edit_canvas_items {
+            match item {
+                CanvasItem::Text(t) => {
+                    let lines = t.text.split('\n').count().max(1) as f32;
+                    let text_top = t.y + TEXT_BOX_TEXT_TOP;
+                    let bottom = text_top + lines * line_h + 6.0;
+                    let width = t.width.unwrap_or(250.0);
+                    if click_x >= t.x
+                        && click_x < t.x + width
+                        && click_y >= t.y
+                        && click_y < bottom
+                    {
+                        return Some((t.id.clone(), None, text_top));
+                    }
+                }
+                CanvasItem::Mixed(m) => {
+                    let width = m.width.unwrap_or(250.0);
+                    if click_x < m.x || click_x >= m.x + width {
+                        continue;
+                    }
+                    if let Some((idx, text_top, box_bottom)) = mixed_text_band(m, click_y, line_h) {
+                        if click_y >= m.y && click_y < box_bottom {
+                            return Some((m.id.clone(), Some(idx), text_top));
+                        }
+                    }
+                }
+                CanvasItem::Image(_) => {}
+            }
+        }
+
+        None
+    }
+
+    /// Hides a plain text box once its last character is removed and leaves the caret behind.
+    pub(crate) fn collapse_empty_active_text_box(&mut self) {
+        if self.active_field != ActiveField::Body || !self.edit_body.trim().is_empty() {
+            return;
+        }
+        let Some(id) = self.active_text_block_id.clone() else {
+            return;
+        };
+        let pos = self.edit_canvas_items.iter().find_map(|item| match item {
+            CanvasItem::Text(t) if t.id == id => Some((t.x, t.y)),
+            _ => None,
+        });
+        let Some((x, y)) = pos else {
+            return;
+        };
+        self.edit_canvas_items.retain(|item| match item {
+            CanvasItem::Text(t) => t.id != id,
+            _ => true,
+        });
+        self.active_text_block_id = None;
+        self.active_block_index = None;
+        self.edit_body_cursor = 0;
+        self.edit_body_anchor = None;
+        self.pending_caret = Some((x + TEXT_BOX_CHROME_X, y + TEXT_BOX_TEXT_TOP + TEXT_CARET_NUDGE_Y));
+        self.cursor_visible = true;
+    }
+}
+
+/// Gap from the box origin to the text, matching the header, border, and padding.
+const TEXT_BOX_CHROME_X: f32 = 6.0;
+const TEXT_BOX_TEXT_TOP: f32 = 18.0;
+const TEXT_BOX_HEADER_H: f32 = 12.0;
+const TEXT_CARET_NUDGE_Y: f32 = 2.0;
+
+fn vertical_gap(click_y: f32, top: f32, bottom: f32) -> f32 {
+    if click_y < top {
+        top - click_y
+    } else if click_y > bottom {
+        click_y - bottom
+    } else {
+        0.0
+    }
+}
+
+/// Character index at the end of the line whose height contains `click_y`.
+fn end_of_line_at(text: &str, text_top: f32, click_y: f32, line_h: f32) -> usize {
+    let line_count = text.split('\n').count().max(1);
+    let rel = (click_y - text_top).max(0.0);
+    let line_idx = if line_h <= 0.0 {
+        0
+    } else {
+        ((rel / line_h).floor() as usize).min(line_count - 1)
+    };
+    let mut offset = 0usize;
+    for (i, line) in text.split('\n').enumerate() {
+        let len = line.chars().count();
+        if i == line_idx {
+            return offset + len;
+        }
+        offset += len + 1;
+    }
+    text.chars().count()
+}
+
+fn mixed_text_band(
+    item: &crate::models::MixedItem,
+    click_y: f32,
+    line_h: f32,
+) -> Option<(usize, f32, f32)> {
+    let mut y = item.y + TEXT_BOX_HEADER_H + 1.0;
+    let mut segments: Vec<(usize, f32, f32, f32)> = Vec::new();
+    for (idx, block) in item.blocks.iter().enumerate() {
+        match block {
+            ContentBlock::Image { height, .. } => {
+                y += *height;
+            }
+            ContentBlock::Text { text, .. } => {
+                let band_top = y;
+                let text_top = y + 5.0;
+                let lines = text.split('\n').count().max(1) as f32;
+                let band_bottom = text_top + lines * line_h + 5.0;
+                segments.push((idx, band_top, text_top, band_bottom));
+                y = band_bottom;
+            }
+        }
+    }
+    if segments.is_empty() {
+        return None;
+    }
+    let box_bottom = y + 1.0;
+    if click_y < item.y || click_y >= box_bottom {
+        return None;
+    }
+    let chosen = segments
+        .iter()
+        .find(|(_, top, _, bottom)| click_y >= *top && click_y < *bottom)
+        .or_else(|| {
+            segments.iter().min_by(|a, b| {
+                let da = vertical_gap(click_y, a.1, a.3);
+                let db = vertical_gap(click_y, b.1, b.3);
+                da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+            })
+        })?;
+    Some((chosen.0, chosen.2, box_bottom))
 }

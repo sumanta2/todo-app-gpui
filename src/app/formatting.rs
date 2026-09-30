@@ -21,6 +21,7 @@ impl NotesApp {
         self.edit_body_italic.clear();
         self.edit_body_underline.clear();
         self.edit_body_strike.clear();
+        self.touch_body_layout();
     }
 
     /// Loads bold, italic, underline, and strikethrough spans into the active editor buffers.
@@ -29,6 +30,7 @@ impl NotesApp {
         self.edit_body_italic = crate::text::styles::spans_to_bool_vec(&styles.italic, len);
         self.edit_body_underline = crate::text::styles::spans_to_bool_vec(&styles.underline, len);
         self.edit_body_strike = crate::text::styles::spans_to_bool_vec(&styles.strike, len);
+        self.touch_body_layout();
     }
 
     fn body_style_flags_mut(&mut self, kind: TextStyleKind) -> &mut Vec<bool> {
@@ -108,6 +110,7 @@ impl NotesApp {
             }
         }
 
+        self.touch_body_layout();
         self.sync_active_text_block();
         cx.notify();
     }
@@ -134,6 +137,7 @@ impl NotesApp {
     #[allow(dead_code)]
     pub(crate) fn set_canvas_body_font_size(&mut self, size: f32) {
         self.canvas_body_font_size = size;
+        self.touch_body_layout();
     }
 
     /// Updates the font size used for items in the page sidebar list.
@@ -146,6 +150,140 @@ impl NotesApp {
     #[allow(dead_code)]
     pub(crate) fn set_font_family(&mut self, family: impl Into<String>) {
         self.font_family = family.into();
+        self.touch_body_layout();
+    }
+
+    /// Marks the body hit-test cache stale. The next pointer sample rebuilds it once.
+    pub(crate) fn touch_body_layout(&mut self) {
+        self.body_layout_stamp = self.body_layout_stamp.wrapping_add(1);
+    }
+
+    pub(crate) fn ensure_body_hit_cache(&mut self) {
+        let font = self.font_type();
+        let size = self.canvas_body_font_size;
+        let stamp = self.body_layout_stamp;
+        let fresh = self.body_hit_cache.as_ref().is_some_and(|cache| {
+            cache.stamp == stamp && cache.font_size == size && cache.font_type == font
+        });
+        if !fresh {
+            self.body_hit_cache = Some(crate::text::selection::build_text_hit_cache(
+                &self.edit_body,
+                Some(&self.edit_body_bold),
+                size,
+                font,
+                stamp,
+            ));
+        }
+    }
+
+    /// Character index under a window point, using the cached line advances.
+    pub(crate) fn body_index_at_mouse(
+        &mut self,
+        mouse: gpui::Point<gpui::Pixels>,
+        item_x: f32,
+        item_y: f32,
+        header_x: f32,
+        header_y: f32,
+    ) -> usize {
+        self.ensure_body_hit_cache();
+        let (rel_x, rel_y) = crate::text::selection::canvas_text_rel(
+            mouse,
+            self.is_sidebar_open,
+            self.pan_x,
+            self.pan_y,
+            item_x,
+            item_y,
+            self.canvas_top_y,
+            header_x,
+            header_y,
+        );
+        match self.body_hit_cache.as_ref() {
+            Some(cache) => crate::text::selection::cache_index_at(cache, rel_x, rel_y),
+            None => 0,
+        }
+    }
+
+    /// Character index on a known line. `rel_x` is already local to the text block.
+    pub(crate) fn body_index_on_line(&mut self, line_start: usize, rel_x: f32) -> usize {
+        self.ensure_body_hit_cache();
+        match self.body_hit_cache.as_ref() {
+            Some(cache) => {
+                crate::text::selection::cache_index_on_line(cache, line_start, rel_x)
+            }
+            None => 0,
+        }
+    }
+
+    /// Viewer hit test. The cache is reused while the same segment and font stay put.
+    pub(crate) fn viewer_index_at_mouse(
+        &mut self,
+        segment_id: &str,
+        text: &str,
+        bold_flags: &[bool],
+        mouse: gpui::Point<gpui::Pixels>,
+        item_x: f32,
+        item_y: f32,
+        header_x: f32,
+        header_y: f32,
+    ) -> usize {
+        let font = self.font_type();
+        let size = self.canvas_body_font_size;
+        let fresh = self.viewer_hit_cache.as_ref().is_some_and(|cache| {
+            self.viewer_hit_cache_id.as_deref() == Some(segment_id)
+                && cache.byte_len == text.len()
+                && cache.bold_len == bold_flags.len()
+                && cache.font_size == size
+                && cache.font_type == font
+        });
+        if !fresh {
+            self.viewer_hit_cache = Some(crate::text::selection::build_text_hit_cache(
+                text,
+                Some(bold_flags),
+                size,
+                font,
+                0,
+            ));
+            self.viewer_hit_cache_id = Some(segment_id.to_string());
+        }
+        let (rel_x, rel_y) = crate::text::selection::canvas_text_rel(
+            mouse,
+            self.is_sidebar_open,
+            self.pan_x,
+            self.pan_y,
+            item_x,
+            item_y,
+            self.canvas_top_y,
+            header_x,
+            header_y,
+        );
+        match self.viewer_hit_cache.as_ref() {
+            Some(cache) => crate::text::selection::cache_index_at(cache, rel_x, rel_y),
+            None => 0,
+        }
+    }
+
+    /// Viewer drag hit test using the cache built when the drag started. Does not copy the text.
+    pub(crate) fn viewer_index_cached(
+        &mut self,
+        mouse: gpui::Point<gpui::Pixels>,
+        item_x: f32,
+        item_y: f32,
+    ) -> usize {
+        let (rel_x, rel_y) = crate::text::selection::canvas_text_rel(
+            mouse,
+            self.is_sidebar_open,
+            self.pan_x,
+            self.pan_y,
+            item_x,
+            item_y,
+            self.canvas_top_y,
+            5.0,
+            5.0,
+        );
+        match self.viewer_hit_cache.as_ref() {
+            Some(cache) => crate::text::selection::cache_index_at(cache, rel_x, rel_y),
+            None => 0,
+        }
     }
 
     /// Returns the active FontType inferred from the currently configured font family.

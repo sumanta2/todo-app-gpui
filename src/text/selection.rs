@@ -473,6 +473,219 @@ pub(crate) fn calculate_canvas_drag_offset_with_bold(
     )
 }
 
+/// One visual line: the buffer index where it starts, and the x position before each character.
+///
+/// `prefix[i]` is the advance at character `i`. `prefix[len]` is the x at the end of the line.
+#[derive(Clone, Debug)]
+pub(crate) struct LineHit {
+    pub(crate) start: usize,
+    pub(crate) prefix: Vec<f32>,
+}
+
+/// Prefix sums of character advances for a whole text buffer.
+///
+/// Built when the text, font, or bold flags change. Pointer moves binary-search it
+/// instead of measuring every character again.
+#[derive(Clone, Debug)]
+pub(crate) struct TextHitCache {
+    pub(crate) font_size: f32,
+    pub(crate) font_type: FontType,
+    pub(crate) byte_len: usize,
+    pub(crate) bold_len: usize,
+    pub(crate) stamp: u64,
+    pub(crate) lines: Vec<LineHit>,
+    pub(crate) total_chars: usize,
+}
+
+/// Writes `next` into `slot` and reports whether the value changed.
+#[inline]
+pub(crate) fn assign_if_changed(slot: &mut usize, next: usize) -> bool {
+    if *slot != next {
+        *slot = next;
+        true
+    } else {
+        false
+    }
+}
+
+/// Advance widths for one line, using the same bold metric as hit testing.
+pub(crate) fn line_prefix(
+    text: &str,
+    bold_flags: Option<&[bool]>,
+    font_size: f32,
+    font_type: FontType,
+) -> Vec<f32> {
+    let bold_multiplier = effective_weight_multiplier(WEIGHT_BOLD, font_type);
+    let mut prefix = Vec::with_capacity(text.chars().count() + 1);
+    let mut x = 0.0f32;
+    prefix.push(0.0);
+    for (idx, ch) in text.chars().enumerate() {
+        let is_bold = bold_flags
+            .and_then(|flags| flags.get(idx).copied())
+            .unwrap_or(false);
+        let mut w = get_char_width_for_font(ch, font_size, font_type);
+        if is_bold {
+            w *= bold_multiplier;
+        }
+        x += w;
+        prefix.push(x);
+    }
+    prefix
+}
+
+/// Widest logical line, using the same advances as the caret.
+///
+/// The text box must be at least this wide or the line wraps and the caret, which follows
+/// logical lines, lands on the wrong row after Enter.
+pub(crate) fn max_text_advance(
+    text: &str,
+    bold_flags: Option<&[bool]>,
+    font_size: f32,
+    font_type: FontType,
+) -> f32 {
+    let mut max_w = 0.0f32;
+    let mut start = 0usize;
+    for line in text.split('\n') {
+        let line_len = line.chars().count();
+        let flags = bold_flags.and_then(|all| {
+            if start < all.len() {
+                let end = (start + line_len).min(all.len());
+                Some(&all[start..end])
+            } else {
+                None
+            }
+        });
+        let prefix = line_prefix(line, flags, font_size, font_type);
+        max_w = max_w.max(prefix.last().copied().unwrap_or(0.0));
+        start += line_len + 1;
+    }
+    max_w
+}
+
+/// X position of a character index inside a line prefix. The index may sit at the end of the line.
+#[inline]
+pub(crate) fn prefix_x(prefix: &[f32], local_index: usize) -> f32 {
+    if prefix.is_empty() {
+        return 0.0;
+    }
+    prefix[local_index.min(prefix.len() - 1)]
+}
+
+/// Closest character index for an x position, matching the midpoint rule of the linear walk.
+pub(crate) fn index_in_prefix(prefix: &[f32], rel_x: f32) -> usize {
+    let char_count = prefix.len().saturating_sub(1);
+    if char_count == 0 || rel_x <= 0.0 {
+        return 0;
+    }
+    if rel_x >= prefix[char_count] {
+        return char_count;
+    }
+
+    let mut lo = 0usize;
+    let mut hi = char_count;
+    while lo < hi {
+        let mid = (lo + hi) / 2;
+        if prefix[mid + 1] <= rel_x {
+            lo = mid + 1;
+        } else {
+            hi = mid;
+        }
+    }
+    if lo >= char_count {
+        return char_count;
+    }
+    let start = prefix[lo];
+    let end = prefix[lo + 1];
+    let midpoint = start + (end - start) / 2.0;
+    if rel_x < midpoint {
+        lo
+    } else {
+        (lo + 1).min(char_count)
+    }
+}
+
+/// Builds per-line prefix sums for `text`. `stamp` is stored so callers can tell the cache is current.
+pub(crate) fn build_text_hit_cache(
+    text: &str,
+    bold_flags: Option<&[bool]>,
+    font_size: f32,
+    font_type: FontType,
+    stamp: u64,
+) -> TextHitCache {
+    let mut lines = Vec::new();
+    let mut start = 0usize;
+    for line in text.split('\n') {
+        let line_len = line.chars().count();
+        let flags = bold_flags.and_then(|all| {
+            if start < all.len() {
+                let end = (start + line_len).min(all.len());
+                Some(&all[start..end])
+            } else {
+                None
+            }
+        });
+        lines.push(LineHit {
+            start,
+            prefix: line_prefix(line, flags, font_size, font_type),
+        });
+        start += line_len + 1;
+    }
+
+    TextHitCache {
+        font_size,
+        font_type,
+        byte_len: text.len(),
+        bold_len: bold_flags.map(|flags| flags.len()).unwrap_or(0),
+        stamp,
+        lines,
+        total_chars: text.chars().count(),
+    }
+}
+
+/// Maps a point inside the text block to a character index using cached line advances.
+pub(crate) fn cache_index_at(cache: &TextHitCache, rel_x: f32, rel_y: f32) -> usize {
+    if cache.lines.is_empty() {
+        return 0;
+    }
+    let line_height = line_height_for_font_size(cache.font_size);
+    let last = cache.lines.len() - 1;
+    let line_idx = if rel_y < 0.0 {
+        0
+    } else {
+        ((rel_y / line_height).floor() as usize).min(last)
+    };
+    let line = &cache.lines[line_idx];
+    let local = index_in_prefix(&line.prefix, rel_x);
+    (line.start + local).min(cache.total_chars)
+}
+
+/// Character index on one cached line. `rel_x` is already local to that line.
+pub(crate) fn cache_index_on_line(cache: &TextHitCache, line_start: usize, rel_x: f32) -> usize {
+    if let Some(line) = cache.lines.iter().find(|line| line.start == line_start) {
+        let local = index_in_prefix(&line.prefix, rel_x);
+        return (line.start + local).min(cache.total_chars);
+    }
+    0
+}
+
+/// Window point to the text block's local origin, matching `calculate_canvas_text_offset_full`.
+pub(crate) fn canvas_text_rel(
+    mouse_pos: gpui::Point<gpui::Pixels>,
+    sidebar_open: bool,
+    pan_x: f32,
+    pan_y: f32,
+    item_x: f32,
+    item_y: f32,
+    canvas_top_y: f32,
+    header_x_offset: f32,
+    header_y_offset: f32,
+) -> (f32, f32) {
+    let sidebar_w = if sidebar_open { 220.0 } else { 44.0 };
+    let rel_x = mouse_pos.x.as_f32() - sidebar_w - pan_x - item_x - header_x_offset;
+    let rel_y = mouse_pos.y.as_f32() - canvas_top_y - pan_y - item_y - header_y_offset;
+    (rel_x, rel_y)
+}
+
 /// Moves a cursor upward by one visual line while keeping the same column whenever possible.
 pub(crate) fn move_cursor_up(text: &str, cursor: usize) -> usize {
     let lines: Vec<&str> = text.split('\n').collect();
@@ -705,5 +918,44 @@ mod tests {
 
         assert!((selection_height_for_font_size(12.0) - 18.0).abs() < 0.01);
         assert!((selection_height_for_font_size(24.0) - 30.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_hit_cache_matches_linear_walk() {
+        let text = "Hello\nBold line stays put";
+        let mut bold = vec![false; text.chars().count()];
+        for flag in bold.iter_mut().skip(6).take(4) {
+            *flag = true;
+        }
+        let cache = build_text_hit_cache(text, Some(&bold), 14.0, FontType::Calibri, 1);
+        let line_height = line_height_for_font_size(14.0);
+
+        for line_i in 0..4 {
+            let rel_y = line_i as f32 * line_height + 1.0;
+            for step in 0..80 {
+                let rel_x = step as f32 * 1.7;
+                let from_cache = cache_index_at(&cache, rel_x, rel_y);
+                let from_walk = calculate_canvas_text_offset_full(
+                    gpui::Point {
+                        x: gpui::px(220.0 + rel_x + 6.0),
+                        y: gpui::px(rel_y + 18.0),
+                    },
+                    true,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    text,
+                    Some(&bold),
+                    6.0,
+                    18.0,
+                    250.0,
+                    14.0,
+                    FontType::Calibri,
+                );
+                assert_eq!(from_cache, from_walk, "rel_x={rel_x} rel_y={rel_y}");
+            }
+        }
     }
 }

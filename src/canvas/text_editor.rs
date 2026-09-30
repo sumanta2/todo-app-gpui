@@ -21,6 +21,7 @@ pub struct TextEditor {
     pub is_selecting: bool,
     pub cursor_visible: bool,
     pub font_size: f32,
+    pub font_type: crate::constants::typography::FontType,
 }
 
 #[allow(dead_code)]
@@ -58,6 +59,9 @@ impl TextEditor {
             is_selecting: false,
             cursor_visible: true,
             font_size: crate::constants::typography::CANVAS_BODY_FONT_SIZE,
+            font_type: crate::constants::typography::FontType::from_family_name(
+                crate::constants::typography::DEFAULT_FONT_FAMILY,
+            ),
         }
     }
 
@@ -331,12 +335,9 @@ impl TextEditor {
         F: FnMut(usize, usize, &str, gpui::Div) -> AnyElement,
     {
         let text = self.text.as_str();
-        let cursor_idx = self.cursor;
         let font_size = self.font_size;
         let line_height = self.line_height();
         let cursor_height = self.cursor_height();
-        let sel_height = self.selection_height();
-        let selection_range = self.selection();
 
         if text.is_empty() {
             let row = div()
@@ -370,7 +371,6 @@ impl TextEditor {
 
         for (line_idx, line) in logical_lines.iter().enumerate() {
             let line_len = line.chars().count();
-            let is_last_line = line_idx == logical_lines.len() - 1;
             let line_start = global_offset;
             let line_end = global_offset + line_len;
 
@@ -389,98 +389,11 @@ impl TextEditor {
                 .relative()
                 .flex()
                 .flex_row()
+                .flex_shrink_0()
                 .items_center()
                 .text_size(px(font_size))
+                .whitespace_nowrap()
                 .min_h(px(line_height));
-
-            let has_sel_overlap = if let Some(ref sel) = selection_range {
-                let sel_overlap_start = sel.start.max(line_start);
-                let sel_overlap_end = sel.end.min(line_end);
-                sel_overlap_start < sel_overlap_end || (line_len == 0 && sel.start <= line_start && sel.end > line_start)
-            } else {
-                false
-            };
-
-            if has_sel_overlap {
-                if let Some(ref sel) = selection_range {
-                    let sel_overlap_start = sel.start.max(line_start);
-                    let sel_overlap_end = sel.end.min(line_end);
-
-                    if sel_overlap_start < sel_overlap_end {
-                        let line_chars: Vec<char> = line.chars().collect();
-                        let loc_start = sel_overlap_start.saturating_sub(line_start).min(line_chars.len());
-                        let loc_end = sel_overlap_end.saturating_sub(line_start).min(line_chars.len());
-
-                        let before_prefix: String = line_chars[..loc_start].iter().collect();
-                        let sel_content: String = line_chars[loc_start..loc_end].iter().collect();
-
-                        let before_flags = &line_bold_flags[..loc_start.min(line_bold_flags.len())];
-                        let before_runs = crate::text::styles::split_text_into_styled_runs(&before_prefix, before_flags);
-                        let mut before_ghosts = Vec::new();
-                        for run in &before_runs {
-                            let disp = run.text.replace(' ', "\u{00A0}");
-                            let el = div()
-                                .text_color(rgba(0x00000000))
-                                .text_size(px(font_size))
-                                .font_weight(if run.is_bold {
-                                    gpui::FontWeight::BOLD
-                                } else {
-                                    gpui::FontWeight::NORMAL
-                                })
-                                .child(disp);
-                            before_ghosts.push(el.into_any_element());
-                        }
-
-                        let sel_flags = &line_bold_flags[loc_start.min(line_bold_flags.len())..loc_end.min(line_bold_flags.len())];
-                        let sel_runs = crate::text::styles::split_text_into_styled_runs(&sel_content, sel_flags);
-                        let mut sel_ghosts = Vec::new();
-                        for run in &sel_runs {
-                            let disp = run.text.replace(' ', "\u{00A0}");
-                            let el = div()
-                                .text_color(rgba(0x00000000))
-                                .text_size(px(font_size))
-                                .font_weight(if run.is_bold {
-                                    gpui::FontWeight::BOLD
-                                } else {
-                                    gpui::FontWeight::NORMAL
-                                })
-                                .child(disp);
-                            sel_ghosts.push(el.into_any_element());
-                        }
-
-                        row = row.child(
-                            div()
-                                .absolute()
-                                .left(px(0.0))
-                                .top(px(1.0))
-                                .flex()
-                                .flex_row()
-                                .items_center()
-                                .children(before_ghosts)
-                                .child(
-                                    div()
-                                        .bg(rgb(0x0078d4))
-                                        .rounded(px(2.0))
-                                        .h(px(sel_height))
-                                        .flex()
-                                        .items_center()
-                                        .children(sel_ghosts),
-                                ),
-                        );
-                    } else if line_len == 0 && sel.start <= line_start && sel.end > line_start {
-                        row = row.child(
-                            div()
-                                .absolute()
-                                .left(px(0.0))
-                                .top(px(1.0))
-                                .w(px(6.0))
-                                .h(px(sel_height))
-                                .bg(rgb(0x0078d4))
-                                .rounded(px(2.0)),
-                        );
-                    }
-                }
-            }
 
             let line_italic = crate::text::styles::slice_flags(&self.italic_flags, line_start, line_end, line_len);
             let line_underline =
@@ -518,56 +431,6 @@ impl TextEditor {
                     .items_center()
                     .children(line_elements),
             );
-
-            // If focused and cursor is in this line, render cursor overlay
-            let is_cursor_in_line = if is_last_line {
-                cursor_idx >= line_start && cursor_idx <= line_end
-            } else {
-                cursor_idx >= line_start && cursor_idx <= line_end
-            };
-
-            if is_focused && is_cursor_in_line && selection_range.is_none() {
-                let local_cursor = cursor_idx.saturating_sub(line_start).min(line_len);
-                let line_chars: Vec<char> = line.chars().collect();
-                let before_prefix: String = line_chars[..local_cursor].iter().collect();
-                let before_flags = &line_bold_flags[..local_cursor.min(line_bold_flags.len())];
-                let before_italic = &line_italic[..local_cursor.min(line_italic.len())];
-                let prefix_runs = crate::text::styles::split_text_into_full_runs(
-                    &before_prefix,
-                    before_flags,
-                    before_italic,
-                    &[],
-                    &[],
-                );
-
-                let mut ghost_elements = Vec::new();
-                for run in &prefix_runs {
-                    ghost_elements.push(styled_run_element(run, font_size, 0x00000000, false));
-                }
-
-                row = row.child(
-                    div()
-                        .absolute()
-                        .left(px(0.0))
-                        .top(px(2.0))
-                        .flex()
-                        .flex_row()
-                        .items_center()
-                        .children(ghost_elements)
-                        .child(
-                            div()
-                                .w(px(2.0))
-                                .h(px(cursor_height))
-                                .bg(if self.cursor_visible {
-                                    rgb(0x0078d4)
-                                } else {
-                                    rgba(0x00000000)
-                                })
-                                .flex_shrink_0()
-                                .ml(px(-1.0)),
-                        ),
-                );
-            }
 
             let row = line_wrapper(line_idx, line_start, line, row);
             line_rows.push(row);

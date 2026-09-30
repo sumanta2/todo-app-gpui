@@ -129,8 +129,11 @@ pub(crate) mod layout {
     pub(crate) const NOTE_ITEM_TEXT_OFFSET_X: f32 =
         SIDEBAR_PADDING_LEFT + NOTE_ITEM_BORDER_LEFT + NOTE_ITEM_PADDING_LEFT; // 22.0px
 
-    /// Left padding before the page heading input above the canvas.
-    pub(crate) const HEADING_PADDING_LEFT: f32 = 5.0;
+    /// Left inset of the page title drawn at the top of the canvas.
+    pub(crate) const HEADING_PADDING_LEFT: f32 = 16.0;
+
+    /// Top inset of the page title drawn at the top of the canvas.
+    pub(crate) const HEADING_PADDING_TOP: f32 = 10.0;
 
     /// Left padding before the sections tab bar in the editor header.
     pub(crate) const SECTION_BAR_PADDING_LEFT: f32 = 10.0;

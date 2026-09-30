@@ -11,6 +11,7 @@
 pub(crate) mod blocks;
 pub(crate) mod editor;
 pub(crate) mod header;
+pub(crate) mod selection_overlay;
 pub(crate) mod text_editor;
 pub(crate) mod text_segment;
 pub(crate) mod viewer;

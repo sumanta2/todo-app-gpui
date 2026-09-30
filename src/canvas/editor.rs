@@ -6,11 +6,11 @@ use crate::app::NotesApp;
 use crate::canvas::canvas_top_tracker;
 use crate::constants::{
     colors::TEXT_HINT,
-    layout::HEADING_PADDING_LEFT,
+    layout::{HEADING_PADDING_LEFT, HEADING_PADDING_TOP},
     typography::{HINT_FONT_SIZE, WEIGHT_BOLD, WEIGHT_NORMAL},
 };
-use crate::models::{ActiveField, CanvasItem, Note, NoteContent, TextItem};
-use crate::text::selection::{calculate_canvas_drag_offset_full, calculate_line_text_offset_with_font};
+use crate::models::{ActiveField, CanvasItem, Note, NoteContent};
+use crate::text::selection::calculate_line_text_offset_with_font;
 
 impl NotesApp {
     /// Renders the editable note canvas and its surrounding controls.
@@ -38,18 +38,11 @@ impl NotesApp {
         let heading_content = self.build_heading_editor(is_heading_focused, cx);
         let canvas_elements = self.render_canvas_elements(is_body_focused, cx);
 
-        let canvas_container = div()
+        let mut canvas_container = div()
             .id("note-body-canvas")
             .flex_1()
             .relative()
             .bg(rgb(0x141414))
-            .border_1()
-            .border_color(if is_body_focused {
-                rgb(0x0078d4)
-            } else {
-                rgb(0x3d3d3d)
-            })
-            .rounded(px(6.0))
             .overflow_hidden()
             .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
                 match event.delta {
@@ -75,7 +68,7 @@ impl NotesApp {
                     cx.notify();
                 }),
             )
-            .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
+            .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, window, cx| {
                 let mut changed = false;
                 if let Some(ref item_id) = this.drag_item_id {
                     if let (Some(start_mouse), Some(start_pos)) =
@@ -153,39 +146,19 @@ impl NotesApp {
                         }
                     }
                 } else if this.is_selecting_body {
-                    if let Some(ref active_id) = this.active_text_block_id.clone() {
-                        let found = this.edit_canvas_items.iter().find(|i| match i {
-                            CanvasItem::Text(t) => t.id == *active_id,
-                            CanvasItem::Mixed(m) => m.id == *active_id,
-                            CanvasItem::Image(_) => false,
-                        });
-                        let pos_width = match found {
-                            Some(CanvasItem::Text(t)) => Some((t.x, t.y, t.width.unwrap_or(250.0))),
-                            Some(CanvasItem::Mixed(m)) => Some((m.x, m.y, m.width.unwrap_or(250.0))),
-                            _ => None,
-                        };
-                        if let Some((item_x, item_y, item_w)) = pos_width {
-                            let drag_idx = calculate_canvas_drag_offset_full(
-                                event.position,
-                                this.is_sidebar_open,
-                                this.pan_x,
-                                this.pan_y,
-                                item_x,
-                                item_y,
-                                this.canvas_top_y,
-                                &this.edit_body,
-                                Some(&this.edit_body_bold),
-                                item_w,
-                                this.canvas_body_font_size,
-                                this.font_type(),
-                            );
-                            this.edit_body_cursor = drag_idx;
-                            changed = true;
-                        }
-                    }
+                    this.queue_selection_drag(
+                        crate::canvas::selection_overlay::HighlightKind::Body,
+                        event.position,
+                        window,
+                        cx,
+                    );
                 } else if this.is_selecting_heading {
                     let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
-                    let rel_x = (event.position.x.as_f32() - sidebar_w - HEADING_PADDING_LEFT).max(0.0);
+                    let rel_x = (event.position.x.as_f32()
+                        - sidebar_w
+                        - HEADING_PADDING_LEFT
+                        - this.pan_x)
+                        .max(0.0);
                     let drag_idx = calculate_line_text_offset_with_font(
                         rel_x,
                         &this.edit_heading,
@@ -193,8 +166,10 @@ impl NotesApp {
                         WEIGHT_NORMAL,
                         this.font_type(),
                     );
-                    this.edit_heading_cursor = drag_idx;
-                    changed = true;
+                    if crate::text::selection::assign_if_changed(&mut this.edit_heading_cursor, drag_idx)
+                    {
+                        changed = true;
+                    }
                 } else if this.is_selecting_section_name {
                     let rel_x = (event.position.x.as_f32() - this.active_section_tab_x).max(0.0);
                     let drag_idx = calculate_line_text_offset_with_font(
@@ -204,8 +179,12 @@ impl NotesApp {
                         WEIGHT_BOLD,
                         this.font_type(),
                     );
-                    this.edit_section_name_cursor = drag_idx;
-                    changed = true;
+                    if crate::text::selection::assign_if_changed(
+                        &mut this.edit_section_name_cursor,
+                        drag_idx,
+                    ) {
+                        changed = true;
+                    }
                 } else if this.is_panning {
                     if let (Some(start_mouse), Some(start_pan)) =
                         (this.pan_start_mouse, this.pan_start_val)
@@ -229,11 +208,7 @@ impl NotesApp {
                 MouseButton::Left,
                 cx.listener(|this, _event: &gpui::MouseUpEvent, _, cx| {
                     if this.is_selecting_body {
-                        if this.edit_body_anchor == Some(this.edit_body_cursor) {
-                            this.edit_body_anchor = None;
-                        }
-                        this.is_selecting_body = false;
-                        cx.notify();
+                        this.end_body_pointer(cx);
                     }
                     if this.is_selecting_heading {
                         if this.edit_heading_anchor == Some(this.edit_heading_cursor) {
@@ -260,52 +235,22 @@ impl NotesApp {
                                         .max(0.0);
 
                                 this.sync_active_text_block();
+                                this.discard_empty_text_items();
 
-                                if let Some(ref active_id) = this.active_text_block_id {
-                                    let is_empty = this.edit_canvas_items.iter().any(|item| match item {
-                                        CanvasItem::Text(t) => {
-                                            t.id == *active_id && t.text.trim().is_empty()
-                                        }
-                                        CanvasItem::Mixed(m) => {
-                                            m.id == *active_id
-                                                && !m.blocks.iter().any(|b| match b {
-                                                    crate::models::ContentBlock::Image { .. } => true,
-                                                    crate::models::ContentBlock::Text { text, .. } => {
-                                                        !text.trim().is_empty()
-                                                    }
-                                                })
-                                        }
-                                        CanvasItem::Image(_) => false,
-                                    });
-                                    if is_empty {
-                                        this.edit_canvas_items.retain(|item| match item {
-                                            CanvasItem::Text(t) => t.id != *active_id,
-                                            CanvasItem::Mixed(m) => m.id != *active_id,
-                                            CanvasItem::Image(_) => true,
-                                        });
-                                    }
+                                // A click inside an existing box joins that box.
+                                // Empty canvas, including space beside a box, only shows a caret.
+                                if let Some((id, block_index, text_top)) =
+                                    this.text_target_at(click_x, click_y)
+                                {
+                                    this.focus_text_line_at_click(
+                                        &id,
+                                        block_index,
+                                        click_y,
+                                        text_top,
+                                    );
+                                } else {
+                                    this.arm_pending_caret(click_x, click_y);
                                 }
-
-                                let new_id = chrono::Local::now().timestamp_millis().to_string();
-                                let new_text_item = TextItem {
-                                    id: new_id.clone(),
-                                    x: click_x,
-                                    y: click_y,
-                                    text: String::new(),
-                                    width: Some(250.0),
-                                    bold_spans: Vec::new(),
-                                    italic_spans: Vec::new(),
-                                    underline_spans: Vec::new(),
-                                    strike_spans: Vec::new(),
-                                };
-                                this.edit_canvas_items.push(CanvasItem::Text(new_text_item));
-                                this.active_text_block_id = Some(new_id);
-                                this.active_block_index = None;
-                                this.edit_body = String::new();
-                                this.reset_body_styles();
-                                this.edit_body_cursor = 0;
-                                this.edit_body_anchor = None;
-                                this.active_field = ActiveField::Body;
                             }
                         }
                     }
@@ -325,14 +270,43 @@ impl NotesApp {
             .child(
                 div()
                     .absolute()
-                    .top(px(12.0))
-                    .left(px(12.0))
+                    .top(px(HEADING_PADDING_TOP + self.page_heading_font_size + 14.0))
+                    .left(px(HEADING_PADDING_LEFT))
                     .text_size(px(HINT_FONT_SIZE))
                     .text_color(rgb(TEXT_HINT))
-                    .child("💡 Click canvas to type | Home: B I U S | Ctrl+B / Ctrl+I / Ctrl+U | Drag headers to move | Ctrl+V to paste"),
+                    .child("💡 Click to place the cursor, then type | Home: B I U S | Ctrl+B / Ctrl+I / Ctrl+U | Drag headers to move | Ctrl+V to paste"),
             )
             .child(canvas_top_tracker(cx.entity()))
             .children(canvas_elements);
+
+        if self.is_editing
+            && self.active_field == ActiveField::Body
+            && self.active_text_block_id.is_none()
+        {
+            if let Some((caret_x, caret_y)) = self.pending_caret {
+                canvas_container = canvas_container.child(
+                    div()
+                        .absolute()
+                        .left(px(caret_x + self.pan_x))
+                        .top(px(caret_y + self.pan_y))
+                        .w(px(2.0))
+                        .h(px(self.canvas_cursor_height()))
+                        .bg(if self.cursor_visible {
+                            rgb(0x0078d4)
+                        } else {
+                            gpui::rgba(0x00000000)
+                        }),
+                );
+            }
+        }
+
+        canvas_container = canvas_container.child(
+            div()
+                .absolute()
+                .top(px(HEADING_PADDING_TOP + self.pan_y))
+                .left(px(HEADING_PADDING_LEFT + self.pan_x))
+                .child(heading_content),
+        );
 
         div()
             .flex()
@@ -348,40 +322,7 @@ impl NotesApp {
                     .flex_row()
                     .flex_1()
                     .h_full()
-                    .gap(px(8.0))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_1()
-                            .h_full()
-                            .gap(px(8.0))
-                            .child(
-                                div()
-                                    .px(px(5.0))
-                                    .py(px(2.0))
-                                    .border_b_1()
-                                    .border_color(if is_heading_focused {
-                                        rgb(0x0078d4)
-                                    } else {
-                                        rgb(0x2d2d2d)
-                                    })
-                                    .cursor_text()
-                                    .on_mouse_down(
-                                        MouseButton::Left,
-                                        cx.listener(|this, _, window, cx| {
-                                            this.active_field = ActiveField::Heading;
-                                            this.focus_handle.focus(window, cx);
-                                            this.edit_heading_cursor =
-                                                this.edit_heading.chars().count();
-                                            this.edit_heading_anchor = None;
-                                            cx.notify();
-                                        }),
-                                    )
-                                    .child(heading_content),
-                            )
-                            .child(canvas_container),
-                    )
+                    .child(canvas_container)
                     .child(page_sidebar),
             )
     }

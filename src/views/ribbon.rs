@@ -1,6 +1,6 @@
 //! Home ribbon for font, style, and formatting commands.
 
-use gpui::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButton};
+use gpui::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButton, Render, Window};
 
 use crate::app::formatting::TextStyleKind;
 use crate::app::NotesApp;
@@ -77,7 +77,6 @@ impl NotesApp {
             .absolute()
             .top(px(40.0))
             .left(px(8.0))
-            .w(px(196.0))
             .p(px(4.0))
             .bg(rgb(0x252526))
             .border_1()
@@ -101,59 +100,69 @@ impl NotesApp {
             );
         }
 
-        menu = menu
-            .child(format_row(
-                "fmt-bold",
-                "B",
-                "Bold",
-                "Ctrl+B",
-                false,
-                false,
-                false,
-                bold_on,
-                editing,
-                cx,
-                TextStyleKind::Bold,
-            ))
-            .child(format_row(
-                "fmt-italic",
-                "I",
-                "Italic",
-                "Ctrl+I",
-                true,
-                false,
-                false,
-                italic_on,
-                editing,
-                cx,
-                TextStyleKind::Italic,
-            ))
-            .child(format_row(
-                "fmt-underline",
-                "U",
-                "Underline",
-                "Ctrl+U",
-                false,
-                true,
-                false,
-                underline_on,
-                editing,
-                cx,
-                TextStyleKind::Underline,
-            ))
-            .child(format_row(
-                "fmt-strike",
-                "S",
-                "Strikethrough",
-                "Ctrl+Shift+X",
-                false,
-                false,
-                true,
-                strike_on,
-                editing,
-                cx,
-                TextStyleKind::Strike,
-            ));
+        menu = menu.child(
+            div()
+                .flex()
+                .flex_row()
+                .items_center()
+                .gap(px(2.0))
+                .child(format_button(
+                    "fmt-bold",
+                    "B",
+                    "Bold",
+                    "Ctrl+B",
+                    "Make your text bold.",
+                    false,
+                    false,
+                    false,
+                    bold_on,
+                    editing,
+                    cx,
+                    TextStyleKind::Bold,
+                ))
+                .child(format_button(
+                    "fmt-italic",
+                    "I",
+                    "Italic",
+                    "Ctrl+I",
+                    "Make your text italic.",
+                    true,
+                    false,
+                    false,
+                    italic_on,
+                    editing,
+                    cx,
+                    TextStyleKind::Italic,
+                ))
+                .child(format_button(
+                    "fmt-underline",
+                    "U",
+                    "Underline",
+                    "Ctrl+U",
+                    "Underline your text.",
+                    false,
+                    true,
+                    false,
+                    underline_on,
+                    editing,
+                    cx,
+                    TextStyleKind::Underline,
+                ))
+                .child(format_button(
+                    "fmt-strike",
+                    "S",
+                    "Strikethrough",
+                    "Ctrl+Shift+X",
+                    "Draw a line through your text.",
+                    false,
+                    false,
+                    true,
+                    strike_on,
+                    editing,
+                    cx,
+                    TextStyleKind::Strike,
+                )),
+        );
 
         vec![
             div()
@@ -175,11 +184,46 @@ impl NotesApp {
     }
 }
 
-fn format_row(
+/// Hover card for a formatting icon: command name with shortcut, then a short description.
+struct FormatTooltip {
+    label: &'static str,
+    shortcut: &'static str,
+    description: &'static str,
+}
+
+impl Render for FormatTooltip {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .p(px(8.0))
+            .bg(rgb(0x252526))
+            .border_1()
+            .border_color(rgb(0x3d3d3d))
+            .rounded(px(4.0))
+            .flex()
+            .flex_col()
+            .gap(px(2.0))
+            .child(
+                div()
+                    .text_size(px(BUTTON_FONT_SIZE))
+                    .font_weight(gpui::FontWeight::SEMIBOLD)
+                    .text_color(rgb(TEXT_PRIMARY))
+                    .child(format!("{} ({})", self.label, self.shortcut)),
+            )
+            .child(
+                div()
+                    .text_size(px(11.0))
+                    .text_color(rgb(TEXT_SECONDARY))
+                    .child(self.description),
+            )
+    }
+}
+
+fn format_button(
     id: &'static str,
     mark: &'static str,
     label: &'static str,
     shortcut: &'static str,
+    description: &'static str,
     italic: bool,
     underline: bool,
     strike: bool,
@@ -200,7 +244,10 @@ fn format_row(
         .w(px(18.0))
         .text_size(px(14.0))
         .font_weight(gpui::FontWeight::BOLD)
-        .text_color(rgb(label_color));
+        .text_color(rgb(label_color))
+        .flex()
+        .items_center()
+        .justify_center();
     if italic {
         mark_el = mark_el.italic();
     }
@@ -212,7 +259,7 @@ fn format_row(
             div()
                 .absolute()
                 .top(px(8.0))
-                .left(px(0.0))
+                .left(px(3.0))
                 .w(px(12.0))
                 .h(px(1.0))
                 .bg(rgb(label_color)),
@@ -221,33 +268,36 @@ fn format_row(
         mark_el = mark_el.child(mark);
     }
 
-    let mut row = div()
+    let mut button = div()
         .id(id)
-        .px(px(8.0))
-        .py(px(5.0))
+        .w(px(28.0))
+        .h(px(28.0))
         .rounded(px(4.0))
         .flex()
-        .flex_row()
         .items_center()
-        .gap(px(8.0))
-        .text_size(px(BUTTON_FONT_SIZE))
-        .text_color(rgb(label_color));
+        .justify_center()
+        .text_color(rgb(label_color))
+        .tooltip(move |_window, cx| {
+            cx.new(|_| FormatTooltip {
+                label,
+                shortcut,
+                description,
+            })
+            .into()
+        });
 
     if active && enabled {
-        row = row.bg(rgb(0x094771));
+        button = button.bg(rgb(0x094771));
     } else if enabled {
-        row = row.cursor_pointer().hover(|style| style.bg(rgb(0x3d3d3d)));
+        button = button
+            .cursor_pointer()
+            .hover(|style| style.bg(rgb(0x3d3d3d)));
     }
 
-    row = row.child(mark_el).child(div().flex_1().child(label)).child(
-        div()
-            .text_size(px(11.0))
-            .text_color(rgb(if enabled { TEXT_SECONDARY } else { TEXT_HINT }))
-            .child(shortcut),
-    );
+    button = button.child(mark_el);
 
     if enabled {
-        row = row.on_mouse_down(
+        button = button.on_mouse_down(
             MouseButton::Left,
             cx.listener(move |this, _, _, cx| {
                 this.toggle_text_style(kind, cx);
@@ -256,5 +306,5 @@ fn format_row(
         );
     }
 
-    row.into_any_element()
+    button.into_any_element()
 }

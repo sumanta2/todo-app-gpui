@@ -4,11 +4,7 @@ use gpui::{div, prelude::*, px, rgb, AnyElement, Context, MouseButton};
 
 use crate::app::NotesApp;
 use crate::constants::colors::TEXT_PRIMARY;
-use crate::models::{ActiveField, CanvasItem, ContentBlock, TextStyleSpans};
-use crate::text::selection::{
-    calculate_canvas_drag_offset_full, calculate_canvas_text_offset_full,
-    calculate_line_text_offset_with_bold_and_font,
-};
+use crate::models::{CanvasItem, ContentBlock, TextStyleSpans};
 
 impl NotesApp {
     /// Looks up the live text and bold spans for a text segment, whether it belongs to a plain
@@ -65,30 +61,12 @@ impl NotesApp {
     }
 
     /// Copies a segment into the live editor buffers and returns its canvas position.
-    fn capture_segment(&mut self, item_id: &str, block_index: Option<usize>) -> Option<(f32, f32)> {
+    pub(crate) fn capture_segment(&mut self, item_id: &str, block_index: Option<usize>) -> Option<(f32, f32)> {
         let (text, styles, x, y) = self.lookup_segment_text(item_id, block_index)?;
         let len = text.chars().count();
         self.load_body_styles(&styles, len);
         self.edit_body = text;
         Some((x, y))
-    }
-
-    /// Looks up an item's position and text-wrap width regardless of whether it is a plain
-    /// `Text` item or a `Mixed` box; used while drag-selecting text so the math always follows
-    /// the box that currently owns the active text segment.
-    fn lookup_item_pos_width(&self, item_id: &str) -> Option<(f32, f32, f32)> {
-        for item in &self.edit_canvas_items {
-            match item {
-                CanvasItem::Text(t) if t.id == item_id => {
-                    return Some((t.x, t.y, t.width.unwrap_or(250.0)));
-                }
-                CanvasItem::Mixed(m) if m.id == item_id => {
-                    return Some((m.x, m.y, m.width.unwrap_or(250.0)));
-                }
-                _ => {}
-            }
-        }
-        None
     }
 
     /// Renders one text segment: either the whole body of a plain `CanvasItem::Text`, or a
@@ -126,6 +104,7 @@ impl NotesApp {
                 is_selecting: self.is_selecting_body,
                 cursor_visible: self.cursor_visible,
                 font_size: self.canvas_body_font_size,
+                font_type: self.font_type(),
             };
 
             let id_for_line = item_id.clone();
@@ -134,11 +113,10 @@ impl NotesApp {
             let block_index_for_line = block_index;
             let block_index_for_down_left = block_index;
             let block_index_for_down_right = block_index;
-            let item_pos_move = item_pos;
+            let selection_layer = self.body_selection_layer(cx);
 
-            let line_wrapper = |line_idx: usize, line_start: usize, line_str: &str, row: gpui::Div| {
+            let line_wrapper = |line_idx: usize, line_start: usize, _line_str: &str, row: gpui::Div| {
                 let id_for_line = id_for_line.clone();
-                let line_str_owned = line_str.to_string();
                 row.id(("editor-line-row", id_num.wrapping_add(line_idx)))
                     .on_mouse_down(
                         MouseButton::Left,
@@ -147,39 +125,20 @@ impl NotesApp {
                             this.is_panning = false;
                             this.pan_start_mouse = None;
                             this.pan_start_val = None;
-                            this.sync_active_text_block();
-                            this.active_text_block_id = Some(id_for_line.clone());
-                            this.active_block_index = block_index_for_line;
-                            this.active_field = ActiveField::Body;
-
-                            let item_x = this
-                                .capture_segment(&id_for_line, block_index_for_line)
-                                .map(|(x, _)| x)
-                                .unwrap_or(item_pos.0);
+                            let (item_x, _item_y, same_block) = this.place_body_pointer(
+                                &id_for_line,
+                                block_index_for_line,
+                                item_pos,
+                            );
 
                             let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
                             let rel_x = (event.position.x.as_f32() - sidebar_w - this.pan_x - item_x - 6.0).max(0.0);
-                            let line_len = line_str_owned.chars().count();
-                            let line_flags = if line_start < this.edit_body_bold.len() {
-                                let end = (line_start + line_len).min(this.edit_body_bold.len());
-                                Some(&this.edit_body_bold[line_start..end])
-                            } else {
-                                None
-                            };
-                            let local_idx = calculate_line_text_offset_with_bold_and_font(
-                                rel_x,
-                                &line_str_owned,
-                                line_flags,
-                                this.canvas_body_font_size,
-                                this.font_type(),
-                            );
-                            let click_idx = (line_start + local_idx).min(this.edit_body.chars().count());
+                            let click_idx = this.body_index_on_line(line_start, rel_x);
 
                             this.edit_body_cursor = click_idx;
                             this.edit_body_anchor = Some(click_idx);
                             this.is_selecting_body = true;
-                            this.cursor_visible = true;
-                            cx.notify();
+                            this.show_body_pointer(same_block, cx);
                             cx.stop_propagation();
                         }),
                     )
@@ -188,6 +147,7 @@ impl NotesApp {
 
             div()
                 .id(("text-content", id_num))
+                .relative()
                 .p(px(5.0))
                 .text_size(px(self.canvas_body_font_size))
                 .cursor_text()
@@ -198,34 +158,16 @@ impl NotesApp {
                         this.is_panning = false;
                         this.pan_start_mouse = None;
                         this.pan_start_val = None;
-                        this.sync_active_text_block();
-                        this.active_text_block_id = Some(id_for_down_left.clone());
-                        this.active_block_index = block_index_for_down_left;
-                        this.active_field = ActiveField::Body;
-                        let (item_x, item_y) = this
-                            .capture_segment(&id_for_down_left, block_index_for_down_left)
-                            .unwrap_or(item_pos);
-                        let click_idx = calculate_canvas_text_offset_full(
-                            event.position,
-                            this.is_sidebar_open,
-                            this.pan_x,
-                            this.pan_y,
-                            item_x,
-                            item_y,
-                            this.canvas_top_y,
-                            &this.edit_body,
-                            Some(&this.edit_body_bold),
-                            6.0,
-                            18.0,
-                            textbox_width,
-                            this.canvas_body_font_size,
-                            this.font_type(),
+                        let (item_x, item_y, same_block) = this.place_body_pointer(
+                            &id_for_down_left,
+                            block_index_for_down_left,
+                            item_pos,
                         );
+                        let click_idx = this.body_index_at_mouse(event.position, item_x, item_y, 6.0, 18.0);
                         this.edit_body_cursor = click_idx;
                         this.edit_body_anchor = Some(click_idx);
                         this.is_selecting_body = true;
-                        this.cursor_visible = true;
-                        cx.notify();
+                        this.show_body_pointer(same_block, cx);
                         cx.stop_propagation();
                     }),
                 )
@@ -236,73 +178,24 @@ impl NotesApp {
                         this.is_panning = false;
                         this.pan_start_mouse = None;
                         this.pan_start_val = None;
-                        this.sync_active_text_block();
-                        this.active_text_block_id = Some(id_for_down_right.clone());
-                        this.active_block_index = block_index_for_down_right;
-                        this.active_field = ActiveField::Body;
-                        let (item_x, item_y) = this
-                            .capture_segment(&id_for_down_right, block_index_for_down_right)
-                            .unwrap_or(item_pos);
-                        let click_idx = calculate_canvas_text_offset_full(
-                            event.position,
-                            this.is_sidebar_open,
-                            this.pan_x,
-                            this.pan_y,
-                            item_x,
-                            item_y,
-                            this.canvas_top_y,
-                            &this.edit_body,
-                            Some(&this.edit_body_bold),
-                            6.0,
-                            18.0,
-                            textbox_width,
-                            this.canvas_body_font_size,
-                            this.font_type(),
+                        let (item_x, item_y, same_block) = this.place_body_pointer(
+                            &id_for_down_right,
+                            block_index_for_down_right,
+                            item_pos,
                         );
+                        let click_idx = this.body_index_at_mouse(event.position, item_x, item_y, 6.0, 18.0);
                         this.edit_body_cursor = click_idx;
                         this.edit_body_anchor = Some(click_idx);
                         this.is_selecting_body = true;
-                        this.cursor_visible = true;
-                        cx.notify();
+                        this.show_body_pointer(same_block, cx);
                         cx.stop_propagation();
                     }),
                 )
-                .on_mouse_move(cx.listener(move |this, event: &gpui::MouseMoveEvent, _, cx| {
-                    if this.is_selecting_body {
-                        let (item_x, item_y, item_w) = if let Some(ref active_id) = this.active_text_block_id {
-                            this.lookup_item_pos_width(active_id)
-                                .unwrap_or((item_pos_move.0, item_pos_move.1, textbox_width))
-                        } else {
-                            (item_pos_move.0, item_pos_move.1, textbox_width)
-                        };
-                        let drag_idx = calculate_canvas_drag_offset_full(
-                            event.position,
-                            this.is_sidebar_open,
-                            this.pan_x,
-                            this.pan_y,
-                            item_x,
-                            item_y,
-                            this.canvas_top_y,
-                            &this.edit_body,
-                            Some(&this.edit_body_bold),
-                            item_w,
-                            this.canvas_body_font_size,
-                            this.font_type(),
-                        );
-                        this.edit_body_cursor = drag_idx;
-                        cx.notify();
-                        cx.stop_propagation();
-                    }
-                }))
                 .on_mouse_up(
                     MouseButton::Left,
                     cx.listener(move |this, _, _, cx| {
                         if this.is_selecting_body {
-                            if this.edit_body_anchor == Some(this.edit_body_cursor) {
-                                this.edit_body_anchor = None;
-                            }
-                            this.is_selecting_body = false;
-                            cx.notify();
+                            this.end_body_pointer(cx);
                             cx.stop_propagation();
                         }
                     }),
@@ -311,15 +204,12 @@ impl NotesApp {
                     MouseButton::Right,
                     cx.listener(move |this, _, _, cx| {
                         if this.is_selecting_body {
-                            if this.edit_body_anchor == Some(this.edit_body_cursor) {
-                                this.edit_body_anchor = None;
-                            }
-                            this.is_selecting_body = false;
-                            cx.notify();
+                            this.end_body_pointer(cx);
                             cx.stop_propagation();
                         }
                     }),
                 )
+                .child(selection_layer)
                 .child(div().w(px(textbox_width - 16.0)).child(text_editor.render_editor_with_line_wrapper(is_body_focused, line_wrapper)))
                 .into_any_element()
         } else {
@@ -340,7 +230,6 @@ impl NotesApp {
                 let line_len = line_str.chars().count();
                 let line_start = global_offset;
                 let line_end = global_offset + line_len;
-                let line_str_owned = line_str.to_string();
                 let id_for_line = item_id.clone();
                 let block_index_for_line = block_index;
 
@@ -390,39 +279,20 @@ impl NotesApp {
                             this.is_panning = false;
                             this.pan_start_mouse = None;
                             this.pan_start_val = None;
-                            this.sync_active_text_block();
-                            this.active_text_block_id = Some(id_for_line.clone());
-                            this.active_block_index = block_index_for_line;
-                            this.active_field = ActiveField::Body;
-
-                            let item_x = this
-                                .capture_segment(&id_for_line, block_index_for_line)
-                                .map(|(x, _)| x)
-                                .unwrap_or(item_pos_move.0);
+                            let (item_x, _item_y, same_block) = this.place_body_pointer(
+                                &id_for_line,
+                                block_index_for_line,
+                                item_pos_move,
+                            );
 
                             let sidebar_w = if this.is_sidebar_open { 220.0 } else { 44.0 };
                             let rel_x = (event.position.x.as_f32() - sidebar_w - this.pan_x - item_x - 6.0).max(0.0);
-                            let line_len = line_str_owned.chars().count();
-                            let line_flags = if line_start < this.edit_body_bold.len() {
-                                let end = (line_start + line_len).min(this.edit_body_bold.len());
-                                Some(&this.edit_body_bold[line_start..end])
-                            } else {
-                                None
-                            };
-                            let local_idx = calculate_line_text_offset_with_bold_and_font(
-                                rel_x,
-                                &line_str_owned,
-                                line_flags,
-                                this.canvas_body_font_size,
-                                this.font_type(),
-                            );
-                            let click_idx = (line_start + local_idx).min(this.edit_body.chars().count());
+                            let click_idx = this.body_index_on_line(line_start, rel_x);
 
                             this.edit_body_cursor = click_idx;
                             this.edit_body_anchor = Some(click_idx);
                             this.is_selecting_body = true;
-                            this.cursor_visible = true;
-                            cx.notify();
+                            this.show_body_pointer(same_block, cx);
                             cx.stop_propagation();
                         }),
                     );
@@ -443,34 +313,16 @@ impl NotesApp {
                         this.is_panning = false;
                         this.pan_start_mouse = None;
                         this.pan_start_val = None;
-                        this.sync_active_text_block();
-                        this.active_text_block_id = Some(id_for_inactive_left.clone());
-                        this.active_block_index = block_index_for_inactive_left;
-                        this.active_field = ActiveField::Body;
-                        let (item_x, item_y) = this
-                            .capture_segment(&id_for_inactive_left, block_index_for_inactive_left)
-                            .unwrap_or(item_pos);
-                        let click_idx = calculate_canvas_text_offset_full(
-                            event.position,
-                            this.is_sidebar_open,
-                            this.pan_x,
-                            this.pan_y,
-                            item_x,
-                            item_y,
-                            this.canvas_top_y,
-                            &this.edit_body,
-                            Some(&this.edit_body_bold),
-                            6.0,
-                            18.0,
-                            textbox_width,
-                            this.canvas_body_font_size,
-                            this.font_type(),
+                        let (item_x, item_y, same_block) = this.place_body_pointer(
+                            &id_for_inactive_left,
+                            block_index_for_inactive_left,
+                            item_pos,
                         );
+                        let click_idx = this.body_index_at_mouse(event.position, item_x, item_y, 6.0, 18.0);
                         this.edit_body_cursor = click_idx;
                         this.edit_body_anchor = Some(click_idx);
                         this.is_selecting_body = true;
-                        this.cursor_visible = true;
-                        cx.notify();
+                        this.show_body_pointer(same_block, cx);
                         cx.stop_propagation();
                     }),
                 )
@@ -481,34 +333,16 @@ impl NotesApp {
                         this.is_panning = false;
                         this.pan_start_mouse = None;
                         this.pan_start_val = None;
-                        this.sync_active_text_block();
-                        this.active_text_block_id = Some(id_for_inactive_right.clone());
-                        this.active_block_index = block_index_for_inactive_right;
-                        this.active_field = ActiveField::Body;
-                        let (item_x, item_y) = this
-                            .capture_segment(&id_for_inactive_right, block_index_for_inactive_right)
-                            .unwrap_or(item_pos);
-                        let click_idx = calculate_canvas_text_offset_full(
-                            event.position,
-                            this.is_sidebar_open,
-                            this.pan_x,
-                            this.pan_y,
-                            item_x,
-                            item_y,
-                            this.canvas_top_y,
-                            &this.edit_body,
-                            Some(&this.edit_body_bold),
-                            6.0,
-                            18.0,
-                            textbox_width,
-                            this.canvas_body_font_size,
-                            this.font_type(),
+                        let (item_x, item_y, same_block) = this.place_body_pointer(
+                            &id_for_inactive_right,
+                            block_index_for_inactive_right,
+                            item_pos,
                         );
+                        let click_idx = this.body_index_at_mouse(event.position, item_x, item_y, 6.0, 18.0);
                         this.edit_body_cursor = click_idx;
                         this.edit_body_anchor = Some(click_idx);
                         this.is_selecting_body = true;
-                        this.cursor_visible = true;
-                        cx.notify();
+                        this.show_body_pointer(same_block, cx);
                         cx.stop_propagation();
                     }),
                 )

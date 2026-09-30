@@ -13,9 +13,6 @@ use crate::constants::{
 };
 use crate::helpers::hash_str;
 use crate::models::{load_canvas_items, CanvasItem, ContentBlock, Note, NoteContent};
-use crate::text::selection::calculate_canvas_text_offset_full;
-
-use super::viewer_text::resolve_viewer_segment;
 
 impl NotesApp {
     /// Renders the read-only canvas viewer for a note after editing is finished.
@@ -196,7 +193,6 @@ impl NotesApp {
             name
         };
 
-        let active_items_for_drag = active_page_items.clone();
         let entity = cx.entity();
 
         let canvas_container = div()
@@ -204,9 +200,6 @@ impl NotesApp {
             .flex_1()
             .relative()
             .bg(rgb(0x141414))
-            .border_1()
-            .border_color(rgb(0x3d3d3d))
-            .rounded(px(6.0))
             .overflow_hidden()
             .cursor_default()
             .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
@@ -235,35 +228,14 @@ impl NotesApp {
                 }),
             )
             .on_mouse_move(
-                cx.listener(move |this, event: &gpui::MouseMoveEvent, _, cx| {
+                cx.listener(move |this, event: &gpui::MouseMoveEvent, window, cx| {
                     if this.is_selecting_viewer_text {
-                        if let Some(ref active_id) = this.viewer_active_text_block_id.clone() {
-                            if let Some((text, bold_spans, item_x, item_y, item_w)) =
-                                resolve_viewer_segment(&active_items_for_drag, active_id)
-                            {
-                                let total_chars = text.chars().count();
-                                let bold_flags =
-                                    crate::text::styles::spans_to_bool_vec(&bold_spans, total_chars);
-                                let drag_idx = calculate_canvas_text_offset_full(
-                                    event.position,
-                                    this.is_sidebar_open,
-                                    this.pan_x,
-                                    this.pan_y,
-                                    item_x,
-                                    item_y,
-                                    this.canvas_top_y,
-                                    &text,
-                                    Some(&bold_flags),
-                                    5.0,
-                                    5.0,
-                                    item_w,
-                                    this.canvas_body_font_size,
-                                    this.font_type(),
-                                );
-                                this.viewer_text_cursor = drag_idx;
-                                cx.notify();
-                            }
-                        }
+                        this.queue_selection_drag(
+                            crate::canvas::selection_overlay::HighlightKind::Viewer,
+                            event.position,
+                            window,
+                            cx,
+                        );
                     } else if this.is_panning {
                         if let (Some(start_mouse), Some(start_pan)) =
                             (this.pan_start_mouse, this.pan_start_val)
@@ -281,11 +253,7 @@ impl NotesApp {
                 MouseButton::Left,
                 cx.listener(|this, _event: &gpui::MouseUpEvent, _, cx| {
                     if this.is_selecting_viewer_text {
-                        if this.viewer_text_anchor == Some(this.viewer_text_cursor) {
-                            this.viewer_text_anchor = None;
-                        }
-                        this.is_selecting_viewer_text = false;
-                        cx.notify();
+                        this.end_viewer_pointer(cx);
                     }
                     if this.is_panning {
                         this.is_panning = false;
@@ -298,14 +266,28 @@ impl NotesApp {
             .child(
                 div()
                     .absolute()
-                    .top(px(12.0))
-                    .left(px(12.0))
+                    .top(px(
+                        crate::constants::layout::HEADING_PADDING_TOP
+                            + self.page_heading_font_size
+                            + 14.0,
+                    ))
+                    .left(px(crate::constants::layout::HEADING_PADDING_LEFT))
                     .text_size(px(HINT_FONT_SIZE))
                     .text_color(rgb(TEXT_HINT))
                     .child("💡 Drag the background to pan the canvas"),
             )
             .child(canvas_top_tracker(entity))
-            .children(viewer_elements);
+            .children(viewer_elements)
+            .child(
+                div()
+                    .absolute()
+                    .top(px(crate::constants::layout::HEADING_PADDING_TOP + self.pan_y))
+                    .left(px(crate::constants::layout::HEADING_PADDING_LEFT + self.pan_x))
+                    .text_size(px(self.page_heading_font_size))
+                    .font_weight(gpui::FontWeight::BOLD)
+                    .text_color(rgb(0xffffff))
+                    .child(page_name),
+            );
 
         let section_tabs = {
             let mut tabs = Vec::new();
@@ -413,30 +395,7 @@ impl NotesApp {
                     .flex_row()
                     .flex_1()
                     .h_full()
-                    .gap(px(8.0))
-                    .child(
-                        div()
-                            .flex()
-                            .flex_col()
-                            .flex_1()
-                            .h_full()
-                            .gap(px(8.0))
-                            .child(
-                                div()
-                                    .px(px(5.0))
-                                    .py(px(2.0))
-                                    .border_b_1()
-                                    .border_color(rgb(0x2d2d2d))
-                                    .child(
-                                        div()
-                                            .text_size(px(self.page_heading_font_size))
-                                            .font_weight(gpui::FontWeight::BOLD)
-                                            .text_color(rgb(0xffffff))
-                                            .child(page_name),
-                                    ),
-                            )
-                            .child(canvas_container),
-                    )
+                    .child(canvas_container)
                     .child(page_sidebar),
             )
     }

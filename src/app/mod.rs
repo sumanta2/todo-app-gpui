@@ -46,10 +46,34 @@ pub struct NotesApp {
     pub(crate) edit_body_italic: Vec<bool>,
     pub(crate) edit_body_underline: Vec<bool>,
     pub(crate) edit_body_strike: Vec<bool>,
+    /// Bumped when body text, bold flags, or the canvas font change. The hit cache stores the
+    /// stamp it was built with so pointer moves can reuse it.
+    pub(crate) body_layout_stamp: u64,
+    pub(crate) body_hit_cache: Option<crate::text::selection::TextHitCache>,
+    /// Read-only viewer selection cache, keyed by the active segment id.
+    pub(crate) viewer_hit_cache: Option<crate::text::selection::TextHitCache>,
+    pub(crate) viewer_hit_cache_id: Option<String>,
+    /// Highlight layers. Notified on their own while a multi-character drag is in progress.
+    pub(crate) body_selection_overlay:
+        std::cell::RefCell<Option<gpui::Entity<crate::canvas::selection_overlay::SelectionOverlay>>>,
+    pub(crate) viewer_selection_overlay:
+        std::cell::RefCell<Option<gpui::Entity<crate::canvas::selection_overlay::SelectionOverlay>>>,
+    /// Latest pointer sample for an in-progress text drag. Applied once per frame.
+    pub(crate) selection_drag_sample:
+        Option<(crate::canvas::selection_overlay::HighlightKind, gpui::Point<gpui::Pixels>)>,
+    pub(crate) selection_drag_queued: bool,
+    /// Canvas position of the block the body or viewer drag started in.
+    pub(crate) body_drag_origin: Option<(f32, f32)>,
+    pub(crate) viewer_drag_origin: Option<(f32, f32)>,
 
     // Canvas State
     pub(crate) edit_canvas_items: Vec<CanvasItem>,
     pub(crate) active_text_block_id: Option<String>,
+    /// Click point of a blinking caret that has not opened a text box yet.
+    /// Edit mode only: the box is created when the user types.
+    pub(crate) pending_caret: Option<(f32, f32)>,
+    /// Text or mixed box currently under the pointer. Its header and border show while set.
+    pub(crate) hovered_canvas_item_id: Option<String>,
     /// When the active block belongs to a `CanvasItem::Mixed`, this is the index of the
     /// `Text` entry inside `blocks` that `edit_body`/`edit_body_bold` mirror.
     pub(crate) active_block_index: Option<usize>,

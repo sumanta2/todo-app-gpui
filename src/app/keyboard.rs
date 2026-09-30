@@ -150,6 +150,7 @@ impl NotesApp {
 
         // Shortcut: Tab toggles focus through Notebook, Section, Page, and Body
         if key.eq_ignore_ascii_case("tab") {
+            self.pending_caret = None;
             match self.active_field {
                 ActiveField::NoteHeading => {
                     self.active_field = ActiveField::SectionName;
@@ -214,7 +215,10 @@ impl NotesApp {
                     }
                 }
                 ActiveField::Body => {
-                    self.sync_active_text_block();
+                    if self.active_field == ActiveField::Body {
+                    self.touch_body_layout();
+                }
+                self.sync_active_text_block();
                     self.active_field = ActiveField::NoteHeading;
                 }
             }
@@ -237,6 +241,14 @@ impl NotesApp {
             if pasted_image {
                 return;
             }
+        }
+
+        if self.pending_caret.is_some()
+            && self.active_field == ActiveField::Body
+            && self.active_text_block_id.is_none()
+            && key_opens_pending_box(event, cx)
+        {
+            self.materialize_pending_caret();
         }
 
         // Get active field refs
@@ -410,7 +422,11 @@ impl NotesApp {
                     }
                     *cursor = start;
                     *anchor = None;
-                    self.sync_active_text_block();
+                    if self.active_field == ActiveField::Body {
+                    self.touch_body_layout();
+                }
+                self.sync_active_text_block();
+                    self.collapse_empty_active_text_box();
                     cx.notify();
                 }
                 return;
@@ -468,7 +484,10 @@ impl NotesApp {
                         }
                         *cursor += paste_len;
                     }
-                    self.sync_active_text_block();
+                    if self.active_field == ActiveField::Body {
+                    self.touch_body_layout();
+                }
+                self.sync_active_text_block();
                     cx.notify();
                 }
                 return;
@@ -516,6 +535,9 @@ impl NotesApp {
                     }
                     *cursor += 1;
                 }
+                if self.active_field == ActiveField::Body {
+                    self.touch_body_layout();
+                }
                 self.sync_active_text_block();
                 cx.notify();
             }
@@ -550,7 +572,11 @@ impl NotesApp {
                 *text = chars.into_iter().collect();
                 *cursor -= 1;
             }
-            self.sync_active_text_block();
+            if self.active_field == ActiveField::Body {
+                    self.touch_body_layout();
+                }
+                self.sync_active_text_block();
+            self.collapse_empty_active_text_box();
             cx.notify();
             return;
         } else if key.eq_ignore_ascii_case("delete") {
@@ -582,7 +608,11 @@ impl NotesApp {
                     *text = chars.into_iter().collect();
                 }
             }
-            self.sync_active_text_block();
+            if self.active_field == ActiveField::Body {
+                    self.touch_body_layout();
+                }
+                self.sync_active_text_block();
+            self.collapse_empty_active_text_box();
             cx.notify();
             return;
         }
@@ -655,9 +685,28 @@ impl NotesApp {
                     }
                     *cursor += char_len;
                 }
+                if self.active_field == ActiveField::Body {
+                    self.touch_body_layout();
+                }
                 self.sync_active_text_block();
                 cx.notify();
             }
         }
     }
+}
+
+/// True when this key should turn a blinking caret into a real text box.
+fn key_opens_pending_box(event: &gpui::KeyDownEvent, cx: &mut Context<NotesApp>) -> bool {
+    let key = event.keystroke.key.as_str();
+    let control = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
+    if control && key.eq_ignore_ascii_case("v") {
+        return cx
+            .read_from_clipboard()
+            .and_then(|item| item.text())
+            .is_some_and(|text| !text.is_empty());
+    }
+    if key.eq_ignore_ascii_case("enter") {
+        return !control;
+    }
+    !control && !event.keystroke.modifiers.platform && event.keystroke.key_char.is_some()
 }

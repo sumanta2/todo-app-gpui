@@ -19,6 +19,9 @@ impl NotesApp {
         cx: &mut Context<Self>,
     ) -> Vec<AnyElement> {
         let mut canvas_elements = Vec::new();
+        if self.active_field == ActiveField::Body {
+            self.ensure_body_hit_cache();
+        }
 
         for (_, item) in self.edit_canvas_items.iter().enumerate() {
             let item_id = match item {
@@ -51,14 +54,13 @@ impl NotesApp {
             match item {
                 CanvasItem::Text(t) => {
                     let textbox_width = if is_active {
-                        let max_line_len = self
-                            .edit_body
-                            .lines()
-                            .map(|line| line.chars().count())
-                            .max()
-                            .unwrap_or(0);
-                        let line_text_w = max_line_len as f32 * 6.2;
-                        let needed_width = line_text_w + 20.0;
+                        let line_text_w = crate::text::selection::max_text_advance(
+                            &self.edit_body,
+                            Some(&self.edit_body_bold),
+                            self.canvas_body_font_size,
+                            self.font_type(),
+                        );
+                        let needed_width = line_text_w + 24.0;
                         let base_w = t.width.unwrap_or(250.0);
                         let desired_w = needed_width.max(base_w).max(250.0);
 
@@ -82,23 +84,22 @@ impl NotesApp {
                         strike: t.strike_spans.clone(),
                     };
 
+                    let show_chrome = self.text_box_chrome_visible(&item_id, is_active);
                     let mut inner_block = div()
                         .flex()
                         .flex_col()
                         .w(px(textbox_width))
-                        .bg(rgb(0x1e1e1e))
-                        .border_1()
-                        .border_color(if is_active {
-                            rgb(0x0078d4)
-                        } else {
-                            rgb(0x3d3d3d)
-                        })
-                        .rounded(px(6.0))
-                        .overflow_hidden();
+                        .rounded(px(6.0));
+                    if show_chrome {
+                        inner_block = inner_block
+                            .bg(rgb(0x1e1e1e))
+                            .border_1()
+                            .border_color(rgb(0x3d3d3d))
+                            .overflow_hidden();
+                    }
 
-                    // Drag Handle header
-                    inner_block = inner_block.child(
-                        div()
+                    // Drag handle. A blank slot keeps the text in place when the bar is hidden.
+                    let header = div()
                             .id(("drag-header", id_num))
                             .h(px(12.0))
                             .bg(rgb(0x2d2d2d))
@@ -146,8 +147,12 @@ impl NotesApp {
                                             cx.stop_propagation();
                                         }),
                                     ),
-                            ),
-                    );
+                            );
+                    if show_chrome {
+                        inner_block = inner_block.child(header);
+                    } else {
+                        inner_block = inner_block.child(div().h(px(12.0)));
+                    }
 
                     let segment = self.render_text_segment(
                         id_num, item_id.clone(), None, text, styles, t_pos.0, t_pos.1,
@@ -156,10 +161,15 @@ impl NotesApp {
                     inner_block = inner_block.child(segment);
 
                     // corner resize handle container
+                    let hover_id = item_id.clone();
                     let mut wrapper = div()
+                        .id(("canvas-text", id_num))
                         .absolute()
                         .left(px(t_pos.0 + self.pan_x))
                         .top(px(t_pos.1 + self.pan_y))
+                        .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                            this.set_canvas_item_hover(&hover_id, *hovered, cx);
+                        }))
                         .child(inner_block);
 
                     // Resize Handle on active text box (corner resize)
@@ -172,7 +182,7 @@ impl NotesApp {
                                 .bottom(px(-4.0))
                                 .w(px(10.0))
                                 .h(px(10.0))
-                                .bg(rgb(0x0078d4))
+                                .bg(rgb(0x3d3d3d))
                                 .cursor_e_resize()
                                 .on_mouse_down(
                                     MouseButton::Left,
@@ -297,14 +307,13 @@ impl NotesApp {
                 }
                 CanvasItem::Mixed(m) => {
                     let textbox_width = if is_active {
-                        let max_line_len = self
-                            .edit_body
-                            .lines()
-                            .map(|line| line.chars().count())
-                            .max()
-                            .unwrap_or(0);
-                        let line_text_w = max_line_len as f32 * 6.2;
-                        let needed_width = line_text_w + 20.0;
+                        let line_text_w = crate::text::selection::max_text_advance(
+                            &self.edit_body,
+                            Some(&self.edit_body_bold),
+                            self.canvas_body_font_size,
+                            self.font_type(),
+                        );
+                        let needed_width = line_text_w + 24.0;
                         let base_w = m.width.unwrap_or(250.0);
                         let desired_w = needed_width.max(base_w).max(250.0);
 
@@ -322,23 +331,22 @@ impl NotesApp {
                     let m_pos = (m.x, m.y);
                     let blocks = m.blocks.clone();
 
+                    let show_chrome = self.text_box_chrome_visible(&item_id, is_active);
                     let mut inner_block = div()
                         .flex()
                         .flex_col()
                         .w(px(textbox_width))
-                        .bg(rgb(0x1e1e1e))
-                        .border_1()
-                        .border_color(if is_active {
-                            rgb(0x0078d4)
-                        } else {
-                            rgb(0x3d3d3d)
-                        })
-                        .rounded(px(6.0))
-                        .overflow_hidden();
+                        .rounded(px(6.0));
+                    if show_chrome {
+                        inner_block = inner_block
+                            .bg(rgb(0x1e1e1e))
+                            .border_1()
+                            .border_color(rgb(0x3d3d3d))
+                            .overflow_hidden();
+                    }
 
-                    // Drag Handle header (drags/deletes the whole combined box)
-                    inner_block = inner_block.child(
-                        div()
+                    // Drag handle. A blank slot keeps the content in place when the bar is hidden.
+                    let header = div()
                             .id(("drag-header", id_num))
                             .h(px(12.0))
                             .bg(rgb(0x2d2d2d))
@@ -386,8 +394,12 @@ impl NotesApp {
                                             cx.stop_propagation();
                                         }),
                                     ),
-                            ),
-                    );
+                            );
+                    if show_chrome {
+                        inner_block = inner_block.child(header);
+                    } else {
+                        inner_block = inner_block.child(div().h(px(12.0)));
+                    }
 
                     for (block_idx, block) in blocks.iter().enumerate() {
                         match block {
@@ -408,7 +420,7 @@ impl NotesApp {
                                                 .bottom(px(-4.0))
                                                 .w(px(10.0))
                                                 .h(px(10.0))
-                                                .bg(rgb(0x0078d4))
+                                                .bg(rgb(0x3d3d3d))
                                                 .cursor_e_resize()
                                                 .on_mouse_down(
                                                     MouseButton::Left,
@@ -460,10 +472,15 @@ impl NotesApp {
                         }
                     }
 
+                    let hover_id = item_id.clone();
                     let mut wrapper = div()
+                        .id(("canvas-mixed", id_num))
                         .absolute()
                         .left(px(m_pos.0 + self.pan_x))
                         .top(px(m_pos.1 + self.pan_y))
+                        .on_hover(cx.listener(move |this, hovered: &bool, _, cx| {
+                            this.set_canvas_item_hover(&hover_id, *hovered, cx);
+                        }))
                         .child(inner_block);
 
                     // Width resize handle for the whole box (wraps the text under the image)
@@ -476,7 +493,7 @@ impl NotesApp {
                                 .bottom(px(-4.0))
                                 .w(px(10.0))
                                 .h(px(10.0))
-                                .bg(rgb(0x0078d4))
+                                .bg(rgb(0x3d3d3d))
                                 .cursor_e_resize()
                                 .on_mouse_down(
                                     MouseButton::Left,
@@ -498,5 +515,25 @@ impl NotesApp {
         }
 
         canvas_elements
+    }
+
+    /// Header and border are visible while the box is hovered, active, or being dragged.
+    fn text_box_chrome_visible(&self, item_id: &str, is_active: bool) -> bool {
+        is_active
+            || self.hovered_canvas_item_id.as_deref() == Some(item_id)
+            || self.drag_item_id.as_deref() == Some(item_id)
+            || self.resize_item_id.as_deref() == Some(item_id)
+    }
+
+    fn set_canvas_item_hover(&mut self, item_id: &str, hovered: bool, cx: &mut Context<Self>) {
+        if hovered {
+            if self.hovered_canvas_item_id.as_deref() != Some(item_id) {
+                self.hovered_canvas_item_id = Some(item_id.to_string());
+                cx.notify();
+            }
+        } else if self.hovered_canvas_item_id.as_deref() == Some(item_id) {
+            self.hovered_canvas_item_id = None;
+            cx.notify();
+        }
     }
 }

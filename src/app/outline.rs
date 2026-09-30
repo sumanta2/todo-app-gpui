@@ -142,6 +142,7 @@ impl NotesApp {
                         self.edit_heading_anchor = None;
 
                         self.active_text_block_id = None;
+                        self.pending_caret = None;
                         self.active_block_index = None;
                         self.edit_body = String::new();
                         self.reset_body_styles();

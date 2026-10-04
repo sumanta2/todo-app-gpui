@@ -9,21 +9,47 @@ mod text;
 mod views;
 
 use gpui::{
-    div, prelude::*, px, rgb, size, App, Bounds, Context, Focusable, IntoElement, Render, Window, WindowBounds, WindowOptions,
+    div, prelude::*, px, rgb, size, App, Bounds, Context, Focusable, IntoElement, Render,
+    TitlebarOptions, Window, WindowBounds, WindowOptions,
 };
 use gpui_platform::application;
 
 use crate::app::NotesApp;
-use crate::constants::colors::TEXT_PRIMARY;
-
 impl Render for NotesApp {
     /// Builds the main application layout for the notes editor.
     ///
-    /// The layout contains the left sidebar for note selection and the right detail pane
-    /// where note content, page management, and canvas editing are rendered.
+    /// The caption bar and ribbon span the window. Under them, a pinned notebook list sits
+    /// beside the canvas and page list. An unpinned list stays hidden and the note switcher
+    /// remains on the section tabs.
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let sidebar = self.render_sidebar(window, cx);
+        let sidebar = if self.full_page_view || !self.sidebar_expanded() {
+            None
+        } else {
+            Some(self.render_sidebar(window, cx))
+        };
+        let show_ribbon = !self.full_page_view && self.selected_note().is_some();
+        let ribbon = if show_ribbon {
+            Some(self.render_home_ribbon(cx))
+        } else {
+            None
+        };
+        let home_menus = if show_ribbon {
+            self.render_home_menu_layers(cx)
+        } else {
+            Vec::new()
+        };
+        let view_menus = if show_ribbon {
+            self.render_view_menu_layers(cx)
+        } else {
+            Vec::new()
+        };
+        let note_menus = if show_ribbon {
+            self.render_note_menu_layers(cx)
+        } else {
+            Vec::new()
+        };
         let detail_pane = self.render_detail_pane(window, cx);
+        let title_bar = self.render_title_bar(window, cx);
 
         div()
             .id("notes-app")
@@ -31,14 +57,58 @@ impl Render for NotesApp {
             .on_key_down(cx.listener(|this, event, _, cx| {
                 this.handle_key(event, cx);
             }))
+            .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
+                if this.drag_page_sidebar(event.position.x.as_f32()) {
+                    cx.notify();
+                }
+            }))
+            .on_mouse_up(
+                gpui::MouseButton::Left,
+                cx.listener(|this, _, _, cx| {
+                    if this.page_sidebar_resizing {
+                        this.page_sidebar_resizing = false;
+                        cx.notify();
+                    }
+                }),
+            )
             .flex()
-            .flex_row()
+            .flex_col()
             .size_full()
-            .bg(rgb(0x1e1e1e))
-            .text_color(rgb(TEXT_PRIMARY))
+            .bg(rgb(crate::constants::colors::ONENOTE_BAR))
+            .text_color(rgb(crate::constants::colors::ONENOTE_INK))
             .font_family(self.font_family.as_str())
-            .child(sidebar)
-            .child(detail_pane)
+            .child(title_bar)
+            .child(
+                div()
+                    .relative()
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .w_full()
+                    .on_mouse_down(
+                        gpui::MouseButton::Left,
+                        cx.listener(|this, _, _, cx| {
+                            if this.title_search_focused {
+                                this.title_search_focused = false;
+                                cx.notify();
+                            }
+                        }),
+                    )
+                    .children(ribbon)
+                    .child(
+                        div()
+                            .flex()
+                            .flex_row()
+                            .flex_1()
+                            .w_full()
+                            .min_h(px(0.0))
+                            .children(sidebar)
+                            .child(detail_pane),
+                    )
+                    .children(home_menus)
+                    .children(view_menus)
+                    .children(note_menus),
+            )
     }
 }
 
@@ -62,23 +132,40 @@ impl Render for NotesApp {
 fn main() {
     // The render function is large; increase the main thread stack size to 64 MB
     // to avoid STATUS_STACK_OVERFLOW on Windows (default stack is only 1 MB).
-    let stack_size = 64 * 1024 * 1024; // 64 MB we reserve, but here ~2-4 mb used
+    // The first paint uses a few megabytes of stack. 8 MB is enough and is faster to
+    // reserve than the previous 64 MB thread stack.
+    let stack_size = 8 * 1024 * 1024;
     let builder = std::thread::Builder::new()
         .name("notes-main".to_string())
         .stack_size(stack_size);
     let handler = builder
         .spawn(|| {
             application().run(|cx: &mut App| {
-                cx.set_text_rendering_mode(gpui::TextRenderingMode::Subpixel);
-                let bounds = Bounds::centered(None, size(px(800.0), px(600.0)), cx);
+                // Grayscale text is cheaper to rasterize than subpixel on the first frame.
+                cx.set_text_rendering_mode(gpui::TextRenderingMode::Grayscale);
+                let bounds = Bounds::centered(None, size(px(1000.0), px(700.0)), cx);
 
                 cx.open_window(
                     WindowOptions {
                         window_bounds: Some(WindowBounds::Windowed(bounds)),
+                        titlebar: Some(TitlebarOptions {
+                            title: Some("Modern Notes".into()),
+                            appears_transparent: true,
+                            traffic_light_position: None,
+                        }),
                         ..Default::default()
                     },
                     |window, cx| {
                         let app = cx.new(NotesApp::new); // calling NotesApp::new in app/editing.rs
+                                                         // Paint text first. Decode images on the next frame so the window can appear.
+                        app.update(cx, |_, cx| {
+                            cx.on_next_frame(window, |this, _, cx| {
+                                if this.defer_images {
+                                    this.defer_images = false;
+                                    cx.notify();
+                                }
+                            });
+                        });
                         app.focus_handle(cx).focus(window, cx);
                         app
                     },

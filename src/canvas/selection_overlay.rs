@@ -11,7 +11,11 @@ use gpui::{
 };
 
 use crate::app::NotesApp;
-use crate::constants::typography::line_height_for_font_size;
+use crate::constants::colors::{NOTE_INK, NOTE_SELECTION};
+use crate::constants::typography::{
+    cursor_height_for_font_size, line_height_for_font_size, selection_height_for_font_size,
+    CURSOR_WIDTH,
+};
 use crate::models::ActiveField;
 use crate::text::selection::{get_selection_range, prefix_x, LineHit, TextHitCache};
 
@@ -36,6 +40,49 @@ impl SelectionOverlay {
 impl Render for SelectionOverlay {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let app = self.app.read(cx);
+        let zoom = app.canvas_zoom.max(0.25);
+        let bar_h = app.canvas_selection_height() * zoom;
+        let caret_h = app.canvas_cursor_height() * zoom;
+        let show_caret = match self.kind {
+            HighlightKind::Body => {
+                get_selection_range(app.edit_body_cursor, app.edit_body_anchor).is_none()
+                    && (app.cursor_visible || app.is_selecting_body)
+            }
+            HighlightKind::Viewer => {
+                get_selection_range(app.viewer_text_cursor, app.viewer_text_anchor).is_none()
+                    && (app.cursor_visible || app.is_selecting_viewer_text)
+            }
+        };
+        let cursor = match self.kind {
+            HighlightKind::Body => app.edit_body_cursor,
+            HighlightKind::Viewer => app.viewer_text_cursor,
+        };
+        let advances: Vec<f32> = {
+            let cache = match self.kind {
+                HighlightKind::Body => app.body_hit_cache.as_ref(),
+                HighlightKind::Viewer => app.viewer_hit_cache.as_ref(),
+            };
+            cache
+                .map(|cache| {
+                    cache
+                        .lines
+                        .iter()
+                        .map(|line| line.prefix.last().copied().unwrap_or(0.0))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let viewer_id = app.viewer_active_text_block_id.clone();
+        let origins: Vec<f32> = advances
+            .iter()
+            .enumerate()
+            .map(|(idx, advance)| match self.kind {
+                HighlightKind::Body => app.body_line_origin(idx, *advance),
+                HighlightKind::Viewer => {
+                    app.viewer_line_origin(viewer_id.as_deref().unwrap_or(""), idx, *advance)
+                }
+            })
+            .collect();
         let (range, cache) = match self.kind {
             HighlightKind::Body => (
                 get_selection_range(app.edit_body_cursor, app.edit_body_anchor),
@@ -46,43 +93,41 @@ impl Render for SelectionOverlay {
                 app.viewer_hit_cache.as_ref(),
             ),
         };
-
-        let bar_h = app.canvas_selection_height();
-        let caret_h = app.canvas_cursor_height();
-        let show_caret = range.is_none() && (app.cursor_visible || app.is_selecting_body || app.is_selecting_viewer_text);
-        let cursor = match self.kind {
-            HighlightKind::Body => app.edit_body_cursor,
-            HighlightKind::Viewer => app.viewer_text_cursor,
-        };
         let bars = match (range, cache) {
-            (Some((start, end)), Some(cache)) => selection_bars(cache, start, end),
+            (Some((start, end)), Some(cache)) => selection_bars(cache, start, end, &origins),
             _ => Vec::new(),
         };
         let caret = if show_caret {
-            cache.and_then(|cache| caret_origin(cache, cursor))
+            cache.and_then(|cache| caret_origin(cache, cursor, &origins))
         } else {
             None
         };
 
         canvas(
-            move |bounds, _, _| (bounds, bars, bar_h, caret, caret_h),
-            |_, (bounds, bars, bar_h, caret, caret_h), window, _| {
+            move |bounds, _, _| (bounds, bars, bar_h, caret, caret_h, zoom),
+            |_, (bounds, bars, bar_h, caret, caret_h, zoom), window, _| {
                 for (x, y, width) in bars {
                     if width <= 0.0 {
                         continue;
                     }
                     let rect = Bounds {
-                        origin: point(bounds.origin.x + px(x), bounds.origin.y + px(y)),
-                        size: size(px(width), px(bar_h)),
+                        origin: point(
+                            bounds.origin.x + px(x * zoom),
+                            bounds.origin.y + px(y * zoom),
+                        ),
+                        size: size(px(width * zoom), px(bar_h)),
                     };
-                    window.paint_quad(fill(rect, rgb(0x0078d4)));
+                    window.paint_quad(fill(rect, rgb(NOTE_SELECTION)));
                 }
                 if let Some((x, y)) = caret {
                     let rect = Bounds {
-                        origin: point(bounds.origin.x + px(x), bounds.origin.y + px(y)),
-                        size: size(px(2.0), px(caret_h)),
+                        origin: point(
+                            bounds.origin.x + px(x * zoom),
+                            bounds.origin.y + px(y * zoom),
+                        ),
+                        size: size(px(CURSOR_WIDTH), px(caret_h)),
                     };
-                    window.paint_quad(fill(rect, rgb(0x0078d4)));
+                    window.paint_quad(fill(rect, rgb(NOTE_INK)));
                 }
             },
         )
@@ -94,7 +139,12 @@ impl Render for SelectionOverlay {
 /// Selection rectangles in text-local coordinates: `(x, y, width)`.
 ///
 /// Only the lines that overlap the range are visited.
-pub(crate) fn selection_bars(cache: &TextHitCache, start: usize, end: usize) -> Vec<(f32, f32, f32)> {
+pub(crate) fn selection_bars(
+    cache: &TextHitCache,
+    start: usize,
+    end: usize,
+    origins: &[f32],
+) -> Vec<(f32, f32, f32)> {
     let mut bars = Vec::new();
     if start >= end || cache.lines.is_empty() {
         return bars;
@@ -106,17 +156,19 @@ pub(crate) fn selection_bars(cache: &TextHitCache, start: usize, end: usize) -> 
         let line = &cache.lines[line_idx];
         let line_chars = line.prefix.len().saturating_sub(1);
         let line_end = line.start + line_chars;
-        let y = line_idx as f32 * line_height + 1.0;
+        let sel_h = selection_height_for_font_size(cache.font_size);
+        let y = line_idx as f32 * line_height + (line_height - sel_h) * 0.5;
+        let origin = origins.get(line_idx).copied().unwrap_or(0.0);
         let overlap_start = start.max(line.start);
         let overlap_end = end.min(line_end);
         if overlap_start < overlap_end {
             let loc_start = overlap_start - line.start;
             let loc_end = overlap_end - line.start;
-            let x0 = prefix_x(&line.prefix, loc_start);
-            let x1 = prefix_x(&line.prefix, loc_end);
+            let x0 = prefix_x(&line.prefix, loc_start) + origin;
+            let x1 = prefix_x(&line.prefix, loc_end) + origin;
             bars.push((x0, y, (x1 - x0).max(0.0)));
         } else if line_chars == 0 && start <= line.start && end > line.start {
-            bars.push((0.0, y, 6.0));
+            bars.push((origin, y, 6.0));
         }
     }
     bars
@@ -136,20 +188,27 @@ fn line_index_at(lines: &[LineHit], index: usize) -> usize {
     lo
 }
 
-fn caret_origin(cache: &TextHitCache, index: usize) -> Option<(f32, f32)> {
+fn caret_origin(cache: &TextHitCache, index: usize, origins: &[f32]) -> Option<(f32, f32)> {
+    let line_h = line_height_for_font_size(cache.font_size);
+    let caret_h = cursor_height_for_font_size(cache.font_size);
+    let y_inset = (line_h - caret_h) * 0.5;
     if cache.lines.is_empty() {
-        return Some((0.0, 2.0));
+        return Some((origins.first().copied().unwrap_or(0.0), y_inset));
     }
     let line_idx = line_index_at(&cache.lines, index);
     let line = &cache.lines[line_idx];
     let local = index.saturating_sub(line.start);
-    let x = prefix_x(&line.prefix, local) - 1.0;
-    let y = line_idx as f32 * line_height_for_font_size(cache.font_size) + 2.0;
+    let x = prefix_x(&line.prefix, local) + origins.get(line_idx).copied().unwrap_or(0.0);
+    let y = line_idx as f32 * line_h + y_inset;
     Some((x, y))
 }
 
 impl NotesApp {
-    fn selection_layer(&self, kind: HighlightKind, cx: &mut Context<Self>) -> Entity<SelectionOverlay> {
+    fn selection_layer(
+        &self,
+        kind: HighlightKind,
+        cx: &mut Context<Self>,
+    ) -> Entity<SelectionOverlay> {
         let slot = match kind {
             HighlightKind::Body => &self.body_selection_overlay,
             HighlightKind::Viewer => &self.viewer_selection_overlay,
@@ -170,7 +229,10 @@ impl NotesApp {
         self.selection_layer(HighlightKind::Body, cx)
     }
 
-    pub(crate) fn viewer_selection_layer(&self, cx: &mut Context<Self>) -> Entity<SelectionOverlay> {
+    pub(crate) fn viewer_selection_layer(
+        &self,
+        cx: &mut Context<Self>,
+    ) -> Entity<SelectionOverlay> {
         self.selection_layer(HighlightKind::Viewer, cx)
     }
 
@@ -183,6 +245,7 @@ impl NotesApp {
         fallback: (f32, f32),
     ) -> (f32, f32, bool) {
         self.pending_caret = None;
+        self.selected_inline_image = None;
         let same = self.active_field == ActiveField::Body
             && self.active_block_index == block_index
             && self.active_text_block_id.as_deref() == Some(block_id);

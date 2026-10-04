@@ -50,7 +50,10 @@ pub(crate) fn split_text_and_bold_at(
     let before: String = chars[..idx].iter().collect();
     let after: String = chars[idx..].iter().collect();
 
-    let before_flags = bold_flags.get(..idx.min(bold_flags.len())).unwrap_or(&[]).to_vec();
+    let before_flags = bold_flags
+        .get(..idx.min(bold_flags.len()))
+        .unwrap_or(&[])
+        .to_vec();
     let after_flags = if idx < bold_flags.len() {
         bold_flags[idx..].to_vec()
     } else {
@@ -60,14 +63,20 @@ pub(crate) fn split_text_and_bold_at(
     (before, before_flags, after, after_flags)
 }
 
-/// A run of text whose bold, italic, underline, and strikethrough state stays the same.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// A run of text whose bold, italic, underline, strikethrough, font, and size stay the same.
+#[derive(Clone, Debug, PartialEq)]
 pub(crate) struct StyledRun {
     pub(crate) text: String,
     pub(crate) is_bold: bool,
     pub(crate) is_italic: bool,
     pub(crate) is_underline: bool,
     pub(crate) is_strike: bool,
+    pub(crate) font_family: u8,
+    pub(crate) font_size: f32,
+    /// `0` means the default body text color.
+    pub(crate) font_color: u32,
+    /// `0` means no highlight.
+    pub(crate) bg_color: u32,
     pub(crate) start: usize,
     pub(crate) end: usize,
 }
@@ -104,7 +113,12 @@ pub(crate) fn remove_style_set(sets: [&mut Vec<bool>; 4], at: usize) {
 }
 
 /// Inserts `count` flags into each style buffer. `values` is bold, italic, underline, strike.
-pub(crate) fn insert_style_set(sets: [&mut Vec<bool>; 4], at: usize, count: usize, values: [bool; 4]) {
+pub(crate) fn insert_style_set(
+    sets: [&mut Vec<bool>; 4],
+    at: usize,
+    count: usize,
+    values: [bool; 4],
+) {
     for (flags, value) in sets.into_iter().zip(values) {
         for i in 0..count {
             let pos = (at + i).min(flags.len());
@@ -117,18 +131,311 @@ fn flag_at(flags: &[bool], idx: usize) -> bool {
     flags.get(idx).copied().unwrap_or(false)
 }
 
-/// Splits a text string into segments whose bold state is consistent across each run.
-pub(crate) fn split_text_into_styled_runs(text: &str, flags: &[bool]) -> Vec<StyledRun> {
-    split_text_into_full_runs(text, flags, &[], &[], &[])
+fn family_at(families: &[u8], idx: usize) -> u8 {
+    families.get(idx).copied().unwrap_or(0)
 }
 
-/// Splits text wherever bold, italic, underline, or strikethrough changes.
+fn size_at(sizes: &[f32], idx: usize) -> f32 {
+    sizes
+        .get(idx)
+        .copied()
+        .filter(|size| *size > 0.0)
+        .unwrap_or(crate::constants::typography::CANVAS_BODY_FONT_SIZE)
+}
+
+fn same_size(left: f32, right: f32) -> bool {
+    (left - right).abs() < 0.05
+}
+
+/// Inserts the ribbon's current font into each character of a new range.
+pub(crate) fn insert_font_values(
+    families: &mut Vec<u8>,
+    sizes: &mut Vec<f32>,
+    at: usize,
+    count: usize,
+    family: u8,
+    size: f32,
+) {
+    if count == 0 {
+        return;
+    }
+    if families.len() < at {
+        families.resize(at, 0);
+    }
+    if sizes.len() < at {
+        sizes.resize(at, crate::constants::typography::CANVAS_BODY_FONT_SIZE);
+    }
+    let at = at.min(families.len()).min(sizes.len());
+    for i in 0..count {
+        families.insert(at + i, family);
+        sizes.insert(at + i, size);
+    }
+}
+
+/// Drops font values for a deleted character range.
+pub(crate) fn drain_font_values(
+    families: &mut Vec<u8>,
+    sizes: &mut Vec<f32>,
+    start: usize,
+    end: usize,
+) {
+    let start_f = start.min(families.len());
+    let end_f = end.min(families.len());
+    if start_f < end_f {
+        families.drain(start_f..end_f);
+    }
+    let start_s = start.min(sizes.len());
+    let end_s = end.min(sizes.len());
+    if start_s < end_s {
+        sizes.drain(start_s..end_s);
+    }
+}
+
+/// Copies color values for one visual line, padding with `0`.
+pub(crate) fn slice_colors(values: &[u32], start: usize, end: usize, len: usize) -> Vec<u32> {
+    let mut sliced = if start < values.len() {
+        values[start..end.min(values.len())].to_vec()
+    } else {
+        Vec::new()
+    };
+    sliced.resize(len, 0);
+    sliced
+}
+
+fn color_at(colors: &[u32], idx: usize) -> u32 {
+    colors.get(idx).copied().unwrap_or(0)
+}
+
+/// Inserts a text color and highlight into each character of a new range.
+pub(crate) fn insert_color_values(
+    colors: &mut Vec<u32>,
+    backgrounds: &mut Vec<u32>,
+    at: usize,
+    count: usize,
+    color: u32,
+    background: u32,
+) {
+    if count == 0 {
+        return;
+    }
+    if colors.len() < at {
+        colors.resize(at, 0);
+    }
+    if backgrounds.len() < at {
+        backgrounds.resize(at, 0);
+    }
+    let at = at.min(colors.len()).min(backgrounds.len());
+    for i in 0..count {
+        colors.insert(at + i, color);
+        backgrounds.insert(at + i, background);
+    }
+}
+
+/// Drops color values for a deleted character range.
+pub(crate) fn drain_color_values(
+    colors: &mut Vec<u32>,
+    backgrounds: &mut Vec<u32>,
+    start: usize,
+    end: usize,
+) {
+    let start_c = start.min(colors.len());
+    let end_c = end.min(colors.len());
+    if start_c < end_c {
+        colors.drain(start_c..end_c);
+    }
+    let start_b = start.min(backgrounds.len());
+    let end_b = end.min(backgrounds.len());
+    if start_b < end_b {
+        backgrounds.drain(start_b..end_b);
+    }
+}
+
+/// Removes the color value for one deleted character.
+pub(crate) fn remove_color_value(colors: &mut Vec<u32>, backgrounds: &mut Vec<u32>, at: usize) {
+    if at < colors.len() {
+        colors.remove(at);
+    }
+    if at < backgrounds.len() {
+        backgrounds.remove(at);
+    }
+}
+
+/// Color stamped onto newly typed characters.
+///
+/// A ribbon choice stays in force while the caret has not moved. Otherwise the character
+/// before the caret supplies the color.
+pub(crate) fn color_for_insert(
+    pinned: &mut bool,
+    pin_at: &mut Option<usize>,
+    typing: u32,
+    colors: &[u32],
+    cursor: usize,
+) -> u32 {
+    if *pinned && *pin_at == Some(cursor) {
+        typing
+    } else {
+        *pinned = false;
+        *pin_at = None;
+        if cursor > 0 {
+            colors.get(cursor - 1).copied().unwrap_or(typing)
+        } else {
+            typing
+        }
+    }
+}
+
+/// Keeps a ribbon color choice attached to the caret after an insert.
+pub(crate) fn advance_color_pin(pinned: bool, pin_at: &mut Option<usize>, cursor: usize) {
+    if pinned {
+        *pin_at = Some(cursor);
+    }
+}
+
+/// Removes the font value for one deleted character.
+pub(crate) fn remove_font_value(families: &mut Vec<u8>, sizes: &mut Vec<f32>, at: usize) {
+    if at < families.len() {
+        families.remove(at);
+    }
+    if at < sizes.len() {
+        sizes.remove(at);
+    }
+}
+
+/// Splits parallel font buffers at a character index.
+pub(crate) fn split_font_at(
+    families: &[u8],
+    sizes: &[f32],
+    cursor: usize,
+) -> (Vec<u8>, Vec<f32>, Vec<u8>, Vec<f32>) {
+    let family_idx = cursor.min(families.len());
+    let size_idx = cursor.min(sizes.len());
+    (
+        families[..family_idx].to_vec(),
+        sizes[..size_idx].to_vec(),
+        families[family_idx..].to_vec(),
+        sizes[size_idx..].to_vec(),
+    )
+}
+
+/// Expands saved font runs into one family index and one pixel size per character.
+pub(crate) fn font_runs_to_vecs(
+    runs: &[crate::models::FontRun],
+    len: usize,
+) -> (Vec<u8>, Vec<f32>, Vec<u32>, Vec<u32>) {
+    let mut families = vec![0u8; len];
+    let mut sizes = vec![crate::constants::typography::CANVAS_BODY_FONT_SIZE; len];
+    let mut colors = vec![0u32; len];
+    let mut backgrounds = vec![0u32; len];
+    for run in runs {
+        let family = crate::constants::typography::font_style_index(&run.family);
+        for i in run.start..run.end.min(len) {
+            families[i] = family;
+            sizes[i] = run.size;
+            colors[i] = run.color;
+            backgrounds[i] = run.background;
+        }
+    }
+    (families, sizes, colors, backgrounds)
+}
+
+/// Collapses per-character font values into runs. All-default text is stored as an empty list.
+pub(crate) fn font_vecs_to_runs(
+    families: &[u8],
+    sizes: &[f32],
+    colors: &[u32],
+    backgrounds: &[u32],
+) -> Vec<crate::models::FontRun> {
+    let len = families
+        .len()
+        .max(sizes.len())
+        .max(colors.len())
+        .max(backgrounds.len());
+    if len == 0 {
+        return Vec::new();
+    }
+    let default_size = crate::constants::typography::CANVAS_BODY_FONT_SIZE;
+    let mut runs = Vec::new();
+    let mut start = 0usize;
+    let mut current_family = family_at(families, 0);
+    let mut current_size = size_at(sizes, 0);
+    let mut current_color = color_at(colors, 0);
+    let mut current_bg = color_at(backgrounds, 0);
+    for idx in 1..len {
+        let family = family_at(families, idx);
+        let size = size_at(sizes, idx);
+        let color = color_at(colors, idx);
+        let background = color_at(backgrounds, idx);
+        if family != current_family
+            || !same_size(size, current_size)
+            || color != current_color
+            || background != current_bg
+        {
+            push_font_run(
+                &mut runs,
+                start,
+                idx,
+                current_family,
+                current_size,
+                current_color,
+                current_bg,
+                default_size,
+            );
+            start = idx;
+            current_family = family;
+            current_size = size;
+            current_color = color;
+            current_bg = background;
+        }
+    }
+    push_font_run(
+        &mut runs,
+        start,
+        len,
+        current_family,
+        current_size,
+        current_color,
+        current_bg,
+        default_size,
+    );
+    runs
+}
+
+fn push_font_run(
+    runs: &mut Vec<crate::models::FontRun>,
+    start: usize,
+    end: usize,
+    family: u8,
+    size: f32,
+    color: u32,
+    background: u32,
+    default_size: f32,
+) {
+    if start >= end
+        || (family == 0 && same_size(size, default_size) && color == 0 && background == 0)
+    {
+        return;
+    }
+    runs.push(crate::models::FontRun {
+        start,
+        end,
+        family: crate::constants::typography::font_style_name(family).to_string(),
+        size,
+        color,
+        background,
+    });
+}
+
+/// Splits text wherever bold, italic, underline, strikethrough, font, or size changes.
 pub(crate) fn split_text_into_full_runs(
     text: &str,
     bold: &[bool],
     italic: &[bool],
     underline: &[bool],
     strike: &[bool],
+    font_family: &[u8],
+    font_size: &[f32],
+    font_color: &[u32],
+    bg_color: &[u32],
 ) -> Vec<StyledRun> {
     let chars: Vec<char> = text.chars().collect();
     if chars.is_empty() {
@@ -140,6 +447,10 @@ pub(crate) fn split_text_into_full_runs(
     let mut current_italic = flag_at(italic, 0);
     let mut current_underline = flag_at(underline, 0);
     let mut current_strike = flag_at(strike, 0);
+    let mut current_family = family_at(font_family, 0);
+    let mut current_size = size_at(font_size, 0);
+    let mut current_color = color_at(font_color, 0);
+    let mut current_bg = color_at(bg_color, 0);
     let mut current_chars = Vec::new();
     let mut run_start = 0;
 
@@ -148,10 +459,18 @@ pub(crate) fn split_text_into_full_runs(
         let is_italic = flag_at(italic, idx);
         let is_underline = flag_at(underline, idx);
         let is_strike = flag_at(strike, idx);
+        let family = family_at(font_family, idx);
+        let size = size_at(font_size, idx);
+        let color = color_at(font_color, idx);
+        let background = color_at(bg_color, idx);
         if is_bold != current_bold
             || is_italic != current_italic
             || is_underline != current_underline
             || is_strike != current_strike
+            || family != current_family
+            || !same_size(size, current_size)
+            || color != current_color
+            || background != current_bg
         {
             runs.push(StyledRun {
                 text: current_chars.into_iter().collect(),
@@ -159,6 +478,10 @@ pub(crate) fn split_text_into_full_runs(
                 is_italic: current_italic,
                 is_underline: current_underline,
                 is_strike: current_strike,
+                font_family: current_family,
+                font_size: current_size,
+                font_color: current_color,
+                bg_color: current_bg,
                 start: run_start,
                 end: idx,
             });
@@ -166,6 +489,10 @@ pub(crate) fn split_text_into_full_runs(
             current_italic = is_italic;
             current_underline = is_underline;
             current_strike = is_strike;
+            current_family = family;
+            current_size = size;
+            current_color = color;
+            current_bg = background;
             current_chars = Vec::new();
             run_start = idx;
         }
@@ -179,6 +506,10 @@ pub(crate) fn split_text_into_full_runs(
             is_italic: current_italic,
             is_underline: current_underline,
             is_strike: current_strike,
+            font_family: current_family,
+            font_size: current_size,
+            font_color: current_color,
+            bg_color: current_bg,
             start: run_start,
             end: chars.len(),
         });
@@ -215,7 +546,7 @@ mod tests {
             flags[i] = true;
         }
 
-        let runs = split_text_into_styled_runs(text, &flags);
+        let runs = split_text_into_full_runs(text, &flags, &[], &[], &[], &[], &[], &[], &[]);
         assert_eq!(runs.len(), 3);
         assert_eq!(runs[0].text, "Hello ");
         assert_eq!(runs[0].is_bold, false);

@@ -6,9 +6,42 @@ use crate::app::NotesApp;
 use crate::models::Note;
 
 impl NotesApp {
-    /// Toggles the collapsed/expanded state of the left sidebar and re-renders the UI.
+    /// Pins or unpins the left notebook list.
     pub(crate) fn toggle_sidebar(&mut self, cx: &mut Context<Self>) {
+        if self.selected_note().is_none() {
+            self.is_sidebar_open = true;
+            self.note_menu_open = false;
+            cx.notify();
+            return;
+        }
         self.is_sidebar_open = !self.is_sidebar_open;
+        if self.is_sidebar_open {
+            self.note_menu_open = false;
+        }
+        cx.notify();
+    }
+
+    /// The notebook list stays expanded when nothing is selected, so Create New Note stays reachable.
+    pub(crate) fn sidebar_expanded(&self) -> bool {
+        self.is_sidebar_open || self.selected_note().is_none()
+    }
+
+    /// Opens `id` as the current notebook and starts editing it.
+    pub(crate) fn select_note(&mut self, id: String, cx: &mut Context<Self>) {
+        if self.selected_note_id.as_ref() == Some(&id) {
+            self.note_menu_open = false;
+            cx.notify();
+            return;
+        }
+        self.persist_edit();
+        self.selected_note_id = Some(id);
+        self.active_section_id = None;
+        self.active_page_id = None;
+        self.view_content = None;
+        self.page_items_cache = None;
+        self.image_cache.clear();
+        self.note_menu_open = false;
+        self.start_edit(cx);
         cx.notify();
     }
 

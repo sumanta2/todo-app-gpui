@@ -14,6 +14,22 @@ use gpui::Context;
 use crate::app::NotesApp;
 use crate::models::ActiveField;
 
+fn uniform_color(values: &[u32], start: usize, end: usize) -> Option<u32> {
+    if start >= end {
+        return None;
+    }
+    let end = end.min(values.len());
+    if start >= end {
+        return Some(0);
+    }
+    let first = values[start];
+    if values[start..end].iter().all(|color| *color == first) {
+        Some(first)
+    } else {
+        None
+    }
+}
+
 impl NotesApp {
     /// Clears every per-character style flag for the text that is currently being edited.
     pub(crate) fn reset_body_styles(&mut self) {
@@ -21,6 +37,12 @@ impl NotesApp {
         self.edit_body_italic.clear();
         self.edit_body_underline.clear();
         self.edit_body_strike.clear();
+        self.edit_body_font_family.clear();
+        self.edit_body_font_size.clear();
+        self.edit_body_font_color.clear();
+        self.edit_body_bg_color.clear();
+        self.edit_body_line_layouts.clear();
+        self.line_layout_anchor.clear();
         self.touch_body_layout();
     }
 
@@ -30,6 +52,13 @@ impl NotesApp {
         self.edit_body_italic = crate::text::styles::spans_to_bool_vec(&styles.italic, len);
         self.edit_body_underline = crate::text::styles::spans_to_bool_vec(&styles.underline, len);
         self.edit_body_strike = crate::text::styles::spans_to_bool_vec(&styles.strike, len);
+        let (families, sizes, colors, backgrounds) =
+            crate::text::styles::font_runs_to_vecs(&styles.font_runs, len);
+        self.edit_body_font_family = families;
+        self.edit_body_font_size = sizes;
+        self.edit_body_font_color = colors;
+        self.edit_body_bg_color = backgrounds;
+        self.edit_body_line_layouts = styles.line_layouts.clone();
         self.touch_body_layout();
     }
 
@@ -72,12 +101,6 @@ impl NotesApp {
         pos > 0 && pos - 1 < flags.len() && flags[pos - 1]
     }
 
-    /// Toggles bold formatting on the current selection or, if no selection exists, on the
-    /// active character.
-    pub(crate) fn toggle_bold(&mut self, cx: &mut Context<Self>) {
-        self.toggle_text_style(TextStyleKind::Bold, cx);
-    }
-
     /// Toggles one character style on the selection, or on the character at the caret.
     pub(crate) fn toggle_text_style(&mut self, kind: TextStyleKind, cx: &mut Context<Self>) {
         if !self.is_editing || self.active_field != ActiveField::Body {
@@ -93,7 +116,8 @@ impl NotesApp {
                 flags.resize(char_count, false);
             }
 
-            if let Some((start, end)) = crate::text::selection::get_selection_range(cursor, anchor) {
+            if let Some((start, end)) = crate::text::selection::get_selection_range(cursor, anchor)
+            {
                 let start = start.min(char_count);
                 let end = end.min(char_count);
                 if start < end {
@@ -112,45 +136,100 @@ impl NotesApp {
 
         self.touch_body_layout();
         self.sync_active_text_block();
+        self.schedule_autosave(cx);
         cx.notify();
     }
 
-    /// Updates the font size used for the notebook name in the sidebar.
-    #[allow(dead_code)]
-    pub(crate) fn set_note_heading_font_size(&mut self, size: f32) {
-        self.note_heading_font_size = size;
+    /// Text color shown on the ribbon: the pinned choice, or the color at the caret.
+    pub(crate) fn shown_font_color(&self) -> u32 {
+        self.shown_color(true)
     }
 
-    /// Updates the font size used for section tabs.
-    #[allow(dead_code)]
-    pub(crate) fn set_section_name_font_size(&mut self, size: f32) {
-        self.section_name_font_size = size;
+    /// Highlight shown on the ribbon: the pinned choice, or the highlight at the caret.
+    pub(crate) fn shown_bg_color(&self) -> u32 {
+        self.shown_color(false)
     }
 
-    /// Updates the font size used for page headings.
-    #[allow(dead_code)]
-    pub(crate) fn set_page_heading_font_size(&mut self, size: f32) {
-        self.page_heading_font_size = size;
+    fn shown_color(&self, font: bool) -> u32 {
+        let typing = if font {
+            self.typing_font_color
+        } else {
+            self.typing_bg_color
+        };
+        let pinned = if font {
+            self.font_color_pinned && self.font_color_pin_at == Some(self.edit_body_cursor)
+        } else {
+            self.bg_color_pinned && self.bg_color_pin_at == Some(self.edit_body_cursor)
+        };
+        if !self.is_editing || self.active_field != ActiveField::Body || pinned {
+            return typing;
+        }
+        let values = if font {
+            &self.edit_body_font_color
+        } else {
+            &self.edit_body_bg_color
+        };
+        if let Some((start, end)) = crate::text::selection::get_selection_range(
+            self.edit_body_cursor,
+            self.edit_body_anchor,
+        ) {
+            if let Some(color) = uniform_color(values, start, end) {
+                return color;
+            }
+        }
+        if self.edit_body_cursor > 0 {
+            return values
+                .get(self.edit_body_cursor - 1)
+                .copied()
+                .unwrap_or(typing);
+        }
+        typing
     }
 
-    /// Updates the font size used for canvas text blocks.
-    #[allow(dead_code)]
-    pub(crate) fn set_canvas_body_font_size(&mut self, size: f32) {
-        self.canvas_body_font_size = size;
-        self.touch_body_layout();
+    /// Sets the text color used for new characters, and paints the current selection.
+    pub(crate) fn set_font_color(&mut self, color: u32, cx: &mut Context<Self>) {
+        self.typing_font_color = color;
+        self.font_color_pinned = true;
+        self.font_color_pin_at = Some(self.edit_body_cursor);
+        self.paint_color(true, color, cx);
     }
 
-    /// Updates the font size used for items in the page sidebar list.
-    #[allow(dead_code)]
-    pub(crate) fn set_page_list_font_size(&mut self, size: f32) {
-        self.page_list_font_size = size;
+    /// Sets the highlight used for new characters, and paints the current selection.
+    pub(crate) fn set_bg_color(&mut self, color: u32, cx: &mut Context<Self>) {
+        self.typing_bg_color = color;
+        self.bg_color_pinned = true;
+        self.bg_color_pin_at = Some(self.edit_body_cursor);
+        self.paint_color(false, color, cx);
     }
 
-    /// Updates the global font family and updates associated metrics.
-    #[allow(dead_code)]
-    pub(crate) fn set_font_family(&mut self, family: impl Into<String>) {
-        self.font_family = family.into();
-        self.touch_body_layout();
+    fn paint_color(&mut self, font: bool, color: u32, cx: &mut Context<Self>) {
+        if self.is_editing && self.active_field == ActiveField::Body {
+            let char_count = self.edit_body.chars().count();
+            let cursor = self.edit_body_cursor;
+            let anchor = self.edit_body_anchor;
+            if let Some((start, end)) = crate::text::selection::get_selection_range(cursor, anchor)
+            {
+                let start = start.min(char_count);
+                let end = end.min(char_count);
+                if start < end {
+                    let values = if font {
+                        &mut self.edit_body_font_color
+                    } else {
+                        &mut self.edit_body_bg_color
+                    };
+                    if values.len() < char_count {
+                        values.resize(char_count, 0);
+                    }
+                    for slot in &mut values[start..end] {
+                        *slot = color;
+                    }
+                    self.touch_body_layout();
+                    self.sync_active_text_block();
+                    self.schedule_autosave(cx);
+                }
+            }
+        }
+        cx.notify();
     }
 
     /// Marks the body hit-test cache stale. The next pointer sample rebuilds it once.
@@ -186,9 +265,10 @@ impl NotesApp {
         header_y: f32,
     ) -> usize {
         self.ensure_body_hit_cache();
+        let header_y = self.body_text_header_y().unwrap_or(header_y);
         let (rel_x, rel_y) = crate::text::selection::canvas_text_rel(
             mouse,
-            self.is_sidebar_open,
+            self.layout_sidebar_w(),
             self.pan_x,
             self.pan_y,
             item_x,
@@ -196,9 +276,23 @@ impl NotesApp {
             self.canvas_top_y,
             header_x,
             header_y,
+            self.canvas_zoom,
         );
+        let (line_idx, advance) = {
+            let Some(cache) = self.body_hit_cache.as_ref() else {
+                return 0;
+            };
+            let line_idx = crate::text::selection::cache_line_at_y(cache, rel_y);
+            let advance = cache
+                .lines
+                .get(line_idx)
+                .and_then(|line| line.prefix.last().copied())
+                .unwrap_or(0.0);
+            (line_idx, advance)
+        };
+        let origin = self.body_line_origin(line_idx, advance);
         match self.body_hit_cache.as_ref() {
-            Some(cache) => crate::text::selection::cache_index_at(cache, rel_x, rel_y),
+            Some(cache) => crate::text::selection::cache_index_at(cache, rel_x - origin, rel_y),
             None => 0,
         }
     }
@@ -206,12 +300,106 @@ impl NotesApp {
     /// Character index on a known line. `rel_x` is already local to the text block.
     pub(crate) fn body_index_on_line(&mut self, line_start: usize, rel_x: f32) -> usize {
         self.ensure_body_hit_cache();
+        let found = self.body_hit_cache.as_ref().and_then(|cache| {
+            cache
+                .lines
+                .iter()
+                .enumerate()
+                .find(|(_, line)| line.start == line_start)
+                .map(|(line_idx, line)| (line_idx, line.prefix.last().copied().unwrap_or(0.0)))
+        });
+        let Some((line_idx, advance)) = found else {
+            return 0;
+        };
+        let origin = self.body_line_origin(line_idx, advance);
         match self.body_hit_cache.as_ref() {
             Some(cache) => {
-                crate::text::selection::cache_index_on_line(cache, line_start, rel_x)
+                crate::text::selection::cache_index_on_line(cache, line_start, rel_x - origin)
             }
             None => 0,
         }
+    }
+
+    /// Screen-pixel distance from a mixed box to the text segment being edited.
+    ///
+    /// Plain text boxes keep the caller's header offset. Text under an image starts lower.
+    fn body_text_header_y(&self) -> Option<f32> {
+        let id = self.active_text_block_id.as_deref()?;
+        let block_index = self.active_block_index?;
+        let mixed = self.edit_canvas_items.iter().find_map(|item| match item {
+            crate::models::CanvasItem::Mixed(mixed) if mixed.id == id => Some(mixed),
+            _ => None,
+        })?;
+        Some(crate::app::editing::mixed_text_line_screen_top(
+            &mixed.blocks,
+            block_index,
+            self.canvas_line_height(),
+            self.canvas_zoom,
+            1.0,
+        ))
+    }
+
+    /// Where the glyphs of one body line start, matching center and right alignment.
+    pub(crate) fn body_line_origin(&self, line_idx: usize, text_advance: f32) -> f32 {
+        let layout = self
+            .edit_body_line_layouts
+            .get(line_idx)
+            .copied()
+            .unwrap_or_default();
+        crate::text::selection::aligned_line_origin(
+            self.body_align_content_width(),
+            layout,
+            text_advance,
+        )
+    }
+
+    /// Flex-row width in character-advance units for the text box being edited.
+    pub(crate) fn body_align_content_width(&self) -> f32 {
+        let zoom = self.canvas_zoom.max(0.25);
+        let (base, item_x) = self.active_body_box();
+        let fitted = if self.active_field == crate::models::ActiveField::Body {
+            self.fitted_text_box_width(base, item_x)
+        } else {
+            base
+        };
+        ((fitted * zoom) - crate::constants::typography::TEXT_COLUMN_INSET).max(0.0) / zoom
+    }
+
+    /// Stored width and canvas x of the text box that owns the body editor.
+    fn active_body_box(&self) -> (f32, f32) {
+        let Some(id) = self.active_text_block_id.as_deref() else {
+            return (250.0, 0.0);
+        };
+        for item in &self.edit_canvas_items {
+            match item {
+                crate::models::CanvasItem::Text(text) if text.id == id => {
+                    return (text.width.unwrap_or(250.0), text.x);
+                }
+                crate::models::CanvasItem::Mixed(mixed) if mixed.id == id => {
+                    return (mixed.width.unwrap_or(250.0), mixed.x);
+                }
+                _ => {}
+            }
+        }
+        (250.0, 0.0)
+    }
+
+    /// Width the active text box grows to so the longest line stays on one row.
+    pub(crate) fn fitted_text_box_width(&self, base_width: f32, item_x: f32) -> f32 {
+        let line_text_w = crate::text::selection::max_text_advance(
+            &self.edit_body,
+            Some(&self.edit_body_bold),
+            self.canvas_body_font_size,
+            self.font_type(),
+        );
+        let needed_width = line_text_w + 24.0;
+        let desired_w = needed_width.max(base_width).max(250.0);
+        let sidebar_w = self.layout_sidebar_w();
+        let page_sidebar_w = self.layout_page_sidebar_w();
+        let canvas_visible_w = (self.window_w - sidebar_w - page_sidebar_w - 30.0).max(300.0);
+        let canvas_max_right = canvas_visible_w - self.pan_x;
+        let max_allowed_width = (canvas_max_right - item_x).max(150.0);
+        desired_w.min(max_allowed_width)
     }
 
     /// Viewer hit test. The cache is reused while the same segment and font stay put.
@@ -247,7 +435,7 @@ impl NotesApp {
         }
         let (rel_x, rel_y) = crate::text::selection::canvas_text_rel(
             mouse,
-            self.is_sidebar_open,
+            self.layout_sidebar_w(),
             self.pan_x,
             self.pan_y,
             item_x,
@@ -255,11 +443,9 @@ impl NotesApp {
             self.canvas_top_y,
             header_x,
             header_y,
+            self.canvas_zoom,
         );
-        match self.viewer_hit_cache.as_ref() {
-            Some(cache) => crate::text::selection::cache_index_at(cache, rel_x, rel_y),
-            None => 0,
-        }
+        self.viewer_index_at_local(segment_id, rel_x, rel_y)
     }
 
     /// Viewer drag hit test using the cache built when the drag started. Does not copy the text.
@@ -271,7 +457,7 @@ impl NotesApp {
     ) -> usize {
         let (rel_x, rel_y) = crate::text::selection::canvas_text_rel(
             mouse,
-            self.is_sidebar_open,
+            self.layout_sidebar_w(),
             self.pan_x,
             self.pan_y,
             item_x,
@@ -279,11 +465,78 @@ impl NotesApp {
             self.canvas_top_y,
             5.0,
             5.0,
+            self.canvas_zoom,
         );
+        let segment_id = self.viewer_hit_cache_id.clone().unwrap_or_default();
+        self.viewer_index_at_local(&segment_id, rel_x, rel_y)
+    }
+
+    fn viewer_index_at_local(&self, segment_id: &str, rel_x: f32, rel_y: f32) -> usize {
+        let (line_idx, advance) = {
+            let Some(cache) = self.viewer_hit_cache.as_ref() else {
+                return 0;
+            };
+            let line_idx = crate::text::selection::cache_line_at_y(cache, rel_y);
+            let advance = cache
+                .lines
+                .get(line_idx)
+                .and_then(|line| line.prefix.last().copied())
+                .unwrap_or(0.0);
+            (line_idx, advance)
+        };
+        let origin = self.viewer_line_origin(segment_id, line_idx, advance);
         match self.viewer_hit_cache.as_ref() {
-            Some(cache) => crate::text::selection::cache_index_at(cache, rel_x, rel_y),
+            Some(cache) => crate::text::selection::cache_index_at(cache, rel_x - origin, rel_y),
             None => 0,
         }
+    }
+
+    /// Glyph start for one viewer line. `segment_id` is a text id or `{mixed}::{block}`.
+    pub(crate) fn viewer_line_origin(
+        &self,
+        segment_id: &str,
+        line_idx: usize,
+        text_advance: f32,
+    ) -> f32 {
+        let Some((box_width, layouts)) = self.viewer_segment_align(segment_id) else {
+            return 0.0;
+        };
+        let layout = layouts.get(line_idx).copied().unwrap_or_default();
+        let zoom = self.canvas_zoom.max(0.25);
+        // The viewer block width is already in screen pixels, with 5px of padding on each side.
+        let content = (box_width - 10.0).max(0.0) / zoom;
+        crate::text::selection::aligned_line_origin(content, layout, text_advance)
+    }
+
+    fn viewer_segment_align(
+        &self,
+        segment_id: &str,
+    ) -> Option<(f32, Vec<crate::models::LineLayout>)> {
+        let items = &self.page_items_cache.as_ref()?.1;
+        if let Some((mixed_id, index)) = segment_id.rsplit_once("::") {
+            if let Ok(index) = index.parse::<usize>() {
+                for item in items {
+                    if let crate::models::CanvasItem::Mixed(mixed) = item {
+                        if mixed.id == mixed_id {
+                            if let Some(crate::models::ContentBlock::Text {
+                                line_layouts, ..
+                            }) = mixed.blocks.get(index)
+                            {
+                                return Some((mixed.width.unwrap_or(250.0), line_layouts.clone()));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for item in items {
+            if let crate::models::CanvasItem::Text(text) = item {
+                if text.id == segment_id {
+                    return Some((text.width.unwrap_or(250.0), text.line_layouts.clone()));
+                }
+            }
+        }
+        None
     }
 
     /// Returns the active FontType inferred from the currently configured font family.

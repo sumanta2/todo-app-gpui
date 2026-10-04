@@ -10,18 +10,10 @@ pub(crate) fn get_selection_range(cursor: usize, anchor: Option<usize>) -> Optio
     None
 }
 
-use crate::constants::typography::{
-    line_height_for_font_size, CANVAS_BODY_FONT_SIZE, DEFAULT_FONT_FAMILY, FontType, WEIGHT_BOLD,
-};
+use crate::constants::typography::{line_height_for_font_size, FontType, WEIGHT_BOLD};
 
 use crate::text::metrics::effective_weight_multiplier;
 pub(crate) use crate::text::metrics::get_char_width_for_font;
-
-/// Estimates the rendered width of a character at a given font size with default Segoe UI metrics.
-#[allow(dead_code)]
-pub(crate) fn get_char_width(ch: char, font_size: f32) -> f32 {
-    get_char_width_for_font(ch, font_size, FontType::from_family_name(DEFAULT_FONT_FAMILY))
-}
 
 /// Measures the estimated rendered width of a string with font-type awareness.
 pub(crate) fn calculate_text_width_for_font(
@@ -36,23 +28,6 @@ pub(crate) fn calculate_text_width_for_font(
         width += get_char_width_for_font(ch, font_size, font_type) * weight_multiplier;
     }
     width
-}
-
-/// Measures the estimated rendered width of a string at a specific font size and weight multiplier.
-#[allow(dead_code)]
-pub(crate) fn calculate_text_width(text: &str, font_size: f32, weight_multiplier: f32) -> f32 {
-    calculate_text_width_for_font(
-        text,
-        font_size,
-        weight_multiplier,
-        FontType::from_family_name(DEFAULT_FONT_FAMILY),
-    )
-}
-
-/// Maps an x-position inside a single line back to the nearest character index.
-#[allow(dead_code)]
-pub(crate) fn calculate_line_text_offset(rel_x: f32, text: &str, font_size: f32) -> usize {
-    calculate_line_text_offset_weighted(rel_x, text, font_size, 1.0)
 }
 
 /// Maps a click position inside a line to closest character index with font-type awareness.
@@ -88,6 +63,7 @@ pub(crate) fn calculate_line_text_offset_with_font(
 }
 
 /// Maps a click position inside a line to the closest character index with a uniform weight multiplier.
+#[cfg(test)]
 pub(crate) fn calculate_line_text_offset_weighted(
     rel_x: f32,
     text: &str,
@@ -99,7 +75,7 @@ pub(crate) fn calculate_line_text_offset_weighted(
         text,
         font_size,
         weight_multiplier,
-        FontType::from_family_name(DEFAULT_FONT_FAMILY),
+        FontType::Calibri,
     )
 }
 
@@ -141,24 +117,8 @@ pub(crate) fn calculate_line_text_offset_with_bold_and_font(
     char_count
 }
 
-/// Maps a click position inside a bold-aware text line to the closest character index.
-#[allow(dead_code)]
-pub(crate) fn calculate_line_text_offset_with_bold(
-    rel_x: f32,
-    text: &str,
-    bold_flags: Option<&[bool]>,
-    font_size: f32,
-) -> usize {
-    calculate_line_text_offset_with_bold_and_font(
-        rel_x,
-        text,
-        bold_flags,
-        font_size,
-        FontType::from_family_name(DEFAULT_FONT_FAMILY),
-    )
-}
-
 /// Computes the canvas character index taking font size and font type into account.
+#[cfg(test)]
 pub(crate) fn calculate_canvas_text_offset_full(
     mouse_pos: gpui::Point<gpui::Pixels>,
     sidebar_open: bool,
@@ -220,257 +180,6 @@ pub(crate) fn calculate_canvas_text_offset_full(
     );
 
     (line_start_global + local_char_offset).min(total_char_count)
-}
-
-/// Computes the character index for a click inside a canvas text block.
-#[allow(dead_code)]
-pub(crate) fn calculate_canvas_text_offset(
-    mouse_pos: gpui::Point<gpui::Pixels>,
-    sidebar_open: bool,
-    pan_x: f32,
-    pan_y: f32,
-    item_x: f32,
-    item_y: f32,
-    canvas_top_y: f32,
-    text: &str,
-    textbox_width: f32,
-) -> usize {
-    calculate_canvas_text_offset_with_header_and_width(
-        mouse_pos,
-        sidebar_open,
-        pan_x,
-        pan_y,
-        item_x,
-        item_y,
-        canvas_top_y,
-        text,
-        6.0,
-        18.0,
-        textbox_width,
-    )
-}
-
-/// Computes a canvas character offset when the text block includes a header offset.
-#[allow(dead_code)]
-pub(crate) fn calculate_canvas_text_offset_with_header(
-    mouse_pos: gpui::Point<gpui::Pixels>,
-    sidebar_open: bool,
-    pan_x: f32,
-    pan_y: f32,
-    item_x: f32,
-    item_y: f32,
-    canvas_top_y: f32,
-    text: &str,
-    header_x_offset: f32,
-    header_y_offset: f32,
-    textbox_width: f32,
-) -> usize {
-    calculate_canvas_text_offset_with_header_and_width(
-        mouse_pos,
-        sidebar_open,
-        pan_x,
-        pan_y,
-        item_x,
-        item_y,
-        canvas_top_y,
-        text,
-        header_x_offset,
-        header_y_offset,
-        textbox_width,
-    )
-}
-
-/// Computes the canvas cursor offset using an explicit width and header padding model.
-pub(crate) fn calculate_canvas_text_offset_with_header_and_width(
-    mouse_pos: gpui::Point<gpui::Pixels>,
-    sidebar_open: bool,
-    pan_x: f32,
-    pan_y: f32,
-    item_x: f32,
-    item_y: f32,
-    canvas_top_y: f32,
-    text: &str,
-    header_x_offset: f32,
-    header_y_offset: f32,
-    textbox_width: f32,
-) -> usize {
-    calculate_canvas_text_offset_with_header_and_bold(
-        mouse_pos,
-        sidebar_open,
-        pan_x,
-        pan_y,
-        item_x,
-        item_y,
-        canvas_top_y,
-        text,
-        None,
-        header_x_offset,
-        header_y_offset,
-        textbox_width,
-    )
-}
-
-/// Computes a canvas character offset while respecting bold formatting metadata.
-pub(crate) fn calculate_canvas_text_offset_with_header_and_bold(
-    mouse_pos: gpui::Point<gpui::Pixels>,
-    sidebar_open: bool,
-    pan_x: f32,
-    pan_y: f32,
-    item_x: f32,
-    item_y: f32,
-    canvas_top_y: f32,
-    text: &str,
-    bold_flags: Option<&[bool]>,
-    header_x_offset: f32,
-    header_y_offset: f32,
-    textbox_width: f32,
-) -> usize {
-    calculate_canvas_text_offset_full(
-        mouse_pos,
-        sidebar_open,
-        pan_x,
-        pan_y,
-        item_x,
-        item_y,
-        canvas_top_y,
-        text,
-        bold_flags,
-        header_x_offset,
-        header_y_offset,
-        textbox_width,
-        CANVAS_BODY_FONT_SIZE,
-        FontType::from_family_name(DEFAULT_FONT_FAMILY),
-    )
-}
-
-/// Calculates the drag target character index with font-size and font-type awareness.
-pub(crate) fn calculate_canvas_drag_offset_full(
-    mouse_pos: gpui::Point<gpui::Pixels>,
-    sidebar_open: bool,
-    pan_x: f32,
-    pan_y: f32,
-    item_x: f32,
-    item_y: f32,
-    canvas_top_y: f32,
-    text: &str,
-    bold_flags: Option<&[bool]>,
-    textbox_width: f32,
-    font_size: f32,
-    font_type: FontType,
-) -> usize {
-    calculate_canvas_text_offset_full(
-        mouse_pos,
-        sidebar_open,
-        pan_x,
-        pan_y,
-        item_x,
-        item_y,
-        canvas_top_y,
-        text,
-        bold_flags,
-        6.0,
-        18.0,
-        textbox_width,
-        font_size,
-        font_type,
-    )
-}
-
-/// Calculates the drag target character index for a canvas text selection gesture.
-#[allow(dead_code)]
-pub(crate) fn calculate_canvas_drag_offset(
-    mouse_pos: gpui::Point<gpui::Pixels>,
-    sidebar_open: bool,
-    pan_x: f32,
-    pan_y: f32,
-    item_x: f32,
-    item_y: f32,
-    canvas_top_y: f32,
-    text: &str,
-    _anchor_idx: usize,
-    textbox_width: f32,
-) -> usize {
-    calculate_canvas_drag_offset_full(
-        mouse_pos,
-        sidebar_open,
-        pan_x,
-        pan_y,
-        item_x,
-        item_y,
-        canvas_top_y,
-        text,
-        None,
-        textbox_width,
-        CANVAS_BODY_FONT_SIZE,
-        FontType::from_family_name(DEFAULT_FONT_FAMILY),
-    )
-}
-
-/// Calculates a drag offset for a canvas text box that has explicit header offsets.
-#[allow(dead_code)]
-pub(crate) fn calculate_canvas_drag_offset_with_header(
-    mouse_pos: gpui::Point<gpui::Pixels>,
-    sidebar_open: bool,
-    pan_x: f32,
-    pan_y: f32,
-    item_x: f32,
-    item_y: f32,
-    canvas_top_y: f32,
-    text: &str,
-    anchor_idx: usize,
-    header_x_offset: f32,
-    header_y_offset: f32,
-    textbox_width: f32,
-) -> usize {
-    calculate_canvas_drag_offset_with_bold(
-        mouse_pos,
-        sidebar_open,
-        pan_x,
-        pan_y,
-        item_x,
-        item_y,
-        canvas_top_y,
-        text,
-        None,
-        anchor_idx,
-        header_x_offset,
-        header_y_offset,
-        textbox_width,
-    )
-}
-
-/// Calculates a drag offset while accounting for bold span metadata.
-pub(crate) fn calculate_canvas_drag_offset_with_bold(
-    mouse_pos: gpui::Point<gpui::Pixels>,
-    sidebar_open: bool,
-    pan_x: f32,
-    pan_y: f32,
-    item_x: f32,
-    item_y: f32,
-    canvas_top_y: f32,
-    text: &str,
-    bold_flags: Option<&[bool]>,
-    _anchor_idx: usize,
-    header_x_offset: f32,
-    header_y_offset: f32,
-    textbox_width: f32,
-) -> usize {
-    calculate_canvas_text_offset_full(
-        mouse_pos,
-        sidebar_open,
-        pan_x,
-        pan_y,
-        item_x,
-        item_y,
-        canvas_top_y,
-        text,
-        bold_flags,
-        header_x_offset,
-        header_y_offset,
-        textbox_width,
-        CANVAS_BODY_FONT_SIZE,
-        FontType::from_family_name(DEFAULT_FONT_FAMILY),
-    )
 }
 
 /// One visual line: the buffer index where it starts, and the x position before each character.
@@ -562,6 +271,24 @@ pub(crate) fn max_text_advance(
     max_w
 }
 
+/// X where a line's glyphs start, in the same units as character advances.
+///
+/// `content_width` is the flex row width. Center and right alignment consume the free
+/// space after indent; left alignment only shifts by the indent.
+pub(crate) fn aligned_line_origin(
+    content_width: f32,
+    layout: crate::models::LineLayout,
+    text_advance: f32,
+) -> f32 {
+    let indent = layout.indent as f32 * crate::constants::typography::INDENT_STEP;
+    let slack = content_width - indent - text_advance;
+    match layout.align {
+        1 => indent + slack * 0.5,
+        2 => indent + slack,
+        _ => indent,
+    }
+}
+
 /// X position of a character index inside a line prefix. The index may sit at the end of the line.
 #[inline]
 pub(crate) fn prefix_x(prefix: &[f32], local_index: usize) -> f32 {
@@ -642,18 +369,26 @@ pub(crate) fn build_text_hit_cache(
     }
 }
 
-/// Maps a point inside the text block to a character index using cached line advances.
-pub(crate) fn cache_index_at(cache: &TextHitCache, rel_x: f32, rel_y: f32) -> usize {
+/// Line under a y position inside the text block. `rel_y` is local to the first line.
+pub(crate) fn cache_line_at_y(cache: &TextHitCache, rel_y: f32) -> usize {
     if cache.lines.is_empty() {
         return 0;
     }
     let line_height = line_height_for_font_size(cache.font_size);
     let last = cache.lines.len() - 1;
-    let line_idx = if rel_y < 0.0 {
+    if rel_y < 0.0 {
         0
     } else {
         ((rel_y / line_height).floor() as usize).min(last)
-    };
+    }
+}
+
+/// Maps a point inside the text block to a character index using cached line advances.
+pub(crate) fn cache_index_at(cache: &TextHitCache, rel_x: f32, rel_y: f32) -> usize {
+    if cache.lines.is_empty() {
+        return 0;
+    }
+    let line_idx = cache_line_at_y(cache, rel_y);
     let line = &cache.lines[line_idx];
     let local = index_in_prefix(&line.prefix, rel_x);
     (line.start + local).min(cache.total_chars)
@@ -671,7 +406,7 @@ pub(crate) fn cache_index_on_line(cache: &TextHitCache, line_start: usize, rel_x
 /// Window point to the text block's local origin, matching `calculate_canvas_text_offset_full`.
 pub(crate) fn canvas_text_rel(
     mouse_pos: gpui::Point<gpui::Pixels>,
-    sidebar_open: bool,
+    sidebar_w: f32,
     pan_x: f32,
     pan_y: f32,
     item_x: f32,
@@ -679,10 +414,12 @@ pub(crate) fn canvas_text_rel(
     canvas_top_y: f32,
     header_x_offset: f32,
     header_y_offset: f32,
+    zoom: f32,
 ) -> (f32, f32) {
-    let sidebar_w = if sidebar_open { 220.0 } else { 44.0 };
-    let rel_x = mouse_pos.x.as_f32() - sidebar_w - pan_x - item_x - header_x_offset;
-    let rel_y = mouse_pos.y.as_f32() - canvas_top_y - pan_y - item_y - header_y_offset;
+    let zoom = if zoom <= 0.05 { 1.0 } else { zoom };
+    // Header chrome stays a fixed screen size, so it is removed before the zoom division.
+    let rel_x = (mouse_pos.x.as_f32() - sidebar_w - pan_x - header_x_offset) / zoom - item_x;
+    let rel_y = (mouse_pos.y.as_f32() - canvas_top_y - pan_y - header_y_offset) / zoom - item_y;
     (rel_x, rel_y)
 }
 
@@ -790,8 +527,8 @@ mod tests {
         assert_eq!(calculate_line_text_offset_weighted(0.0, text, 14.0, 1.0), 0);
 
         // At 14px vs 28px, the same character should be at double the x offset
-        let w_14 = calculate_text_width("Hello", 14.0, 1.0);
-        let w_28 = calculate_text_width("Hello", 28.0, 1.0);
+        let w_14 = calculate_text_width_for_font("Hello", 14.0, 1.0, FontType::Calibri);
+        let w_28 = calculate_text_width_for_font("Hello", 28.0, 1.0, FontType::Calibri);
         assert!((w_28 - w_14 * 2.0).abs() < 0.001);
 
         // Clicking right after "Hello" should return 5 for both font sizes
@@ -808,8 +545,8 @@ mod tests {
     #[test]
     fn test_calculate_line_text_offset_with_weight() {
         let text = "Section Title";
-        let w_normal = calculate_text_width(text, 11.0, 1.00);
-        let w_bold = calculate_text_width(text, 11.0, 1.10);
+        let w_normal = calculate_text_width_for_font(text, 11.0, 1.00, FontType::Calibri);
+        let w_bold = calculate_text_width_for_font(text, 11.0, 1.10, FontType::Calibri);
         assert!(w_bold > w_normal);
 
         // Clicking beyond the end returns full length
@@ -833,9 +570,12 @@ mod tests {
 
         // Clicking exactly at 3.5 chars should map to index 3 or 4 accurately
         let text = "iiii";
-        let offset_0 = calculate_line_text_offset_with_font(0.0, text, 12.0, 1.0, FontType::Monospace);
-        let offset_2 = calculate_line_text_offset_with_font(w_i * 2.0, text, 12.0, 1.0, FontType::Monospace);
-        let offset_4 = calculate_line_text_offset_with_font(w_i * 4.0, text, 12.0, 1.0, FontType::Monospace);
+        let offset_0 =
+            calculate_line_text_offset_with_font(0.0, text, 12.0, 1.0, FontType::Monospace);
+        let offset_2 =
+            calculate_line_text_offset_with_font(w_i * 2.0, text, 12.0, 1.0, FontType::Monospace);
+        let offset_4 =
+            calculate_line_text_offset_with_font(w_i * 4.0, text, 12.0, 1.0, FontType::Monospace);
         assert_eq!(offset_0, 0);
         assert_eq!(offset_2, 2);
         assert_eq!(offset_4, 4);
@@ -844,9 +584,15 @@ mod tests {
     #[test]
     fn test_font_family_inference_and_offsets() {
         assert_eq!(FontType::from_family_name("Consolas"), FontType::Monospace);
-        assert_eq!(FontType::from_family_name("Courier New"), FontType::Monospace);
+        assert_eq!(
+            FontType::from_family_name("Courier New"),
+            FontType::Monospace
+        );
         assert_eq!(FontType::from_family_name("Arial"), FontType::Arial);
-        assert_eq!(FontType::from_family_name("Times New Roman"), FontType::Serif);
+        assert_eq!(
+            FontType::from_family_name("Times New Roman"),
+            FontType::Serif
+        );
         assert_eq!(FontType::from_family_name("Segoe UI"), FontType::SegoeUI);
 
         let text = "mm";
@@ -918,6 +664,34 @@ mod tests {
 
         assert!((selection_height_for_font_size(12.0) - 18.0).abs() < 0.01);
         assert!((selection_height_for_font_size(24.0) - 30.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_aligned_line_origin_centers_and_right_aligns() {
+        use crate::models::LineLayout;
+
+        let left = LineLayout {
+            indent: 0,
+            align: 0,
+        };
+        let center = LineLayout {
+            indent: 0,
+            align: 1,
+        };
+        let right = LineLayout {
+            indent: 0,
+            align: 2,
+        };
+        let indented = LineLayout {
+            indent: 1,
+            align: 1,
+        };
+
+        assert!((aligned_line_origin(200.0, left, 40.0) - 0.0).abs() < 0.01);
+        assert!((aligned_line_origin(200.0, center, 40.0) - 80.0).abs() < 0.01);
+        assert!((aligned_line_origin(200.0, right, 40.0) - 160.0).abs() < 0.01);
+        // Indent 24, then center the remaining slack: 24 + (200 - 24 - 40) / 2 = 92.
+        assert!((aligned_line_origin(200.0, indented, 40.0) - 92.0).abs() < 0.01);
     }
 
     #[test]

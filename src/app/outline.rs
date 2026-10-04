@@ -54,6 +54,9 @@ impl NotesApp {
                     self.active_section_id = None;
                     self.active_page_id = None;
                 }
+                if !self.is_editing {
+                    self.view_content = Some(content);
+                }
             }
         }
     }
@@ -93,7 +96,10 @@ impl NotesApp {
                                     CanvasItem::Image(img) => saved_images.push(img.path.clone()),
                                     CanvasItem::Mixed(m) => {
                                         for b in &m.blocks {
-                                            if let crate::models::ContentBlock::Image { path, .. } = b {
+                                            if let crate::models::ContentBlock::Image {
+                                                path, ..
+                                            } = b
+                                            {
                                                 saved_images.push(path.clone());
                                             }
                                         }
@@ -121,6 +127,7 @@ impl NotesApp {
         cx: &mut Context<Self>,
     ) {
         if self.is_editing {
+            self.persist_edit();
             self.sync_current_page_state();
 
             self.active_section_id = Some(section_id.clone());
@@ -199,6 +206,7 @@ impl NotesApp {
                 }],
             };
             content.sections.push(new_section);
+            self.note_dirty = true;
             self.switch_to_page(new_sec_id, new_page_id, cx);
         }
     }
@@ -218,9 +226,11 @@ impl NotesApp {
                 }
             }
         }
+        self.note_dirty = true;
         if let Some((sec_id, page_id)) = should_switch {
             self.switch_to_page(sec_id, page_id, cx);
         } else {
+            self.persist_edit();
             cx.notify();
         }
     }
@@ -238,6 +248,7 @@ impl NotesApp {
                         images: None,
                     };
                     section.pages.push(new_page);
+                    self.note_dirty = true;
                     self.switch_to_page(sec_id.clone(), new_page_id, cx);
                 }
             }
@@ -261,9 +272,11 @@ impl NotesApp {
                 }
             }
         }
+        self.note_dirty = true;
         if let Some((sec_id, page_id)) = should_switch {
             self.switch_to_page(sec_id, page_id, cx);
         } else {
+            self.persist_edit();
             cx.notify();
         }
     }

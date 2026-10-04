@@ -3,11 +3,12 @@
 use gpui::Context;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use crate::app::NotesApp;
 use crate::helpers::encrypt_decrypt;
-use crate::text::styles::split_text_and_bold_at;
 use crate::models::{ActiveField, CanvasItem, ContentBlock, ImageItem, MixedItem, Note};
+use crate::text::styles::split_text_and_bold_at;
 
 /// Persistent storage helpers for the app's notes and image files.
 ///
@@ -48,8 +49,8 @@ impl NotesApp {
     pub(crate) fn load_notes() -> Option<Vec<Note>> {
         let path = Self::get_storage_path();
         if path.exists() {
-            let content = fs::read_to_string(path).ok()?;
-            serde_json::from_str(&content).ok()
+            let bytes = fs::read(path).ok()?;
+            serde_json::from_slice(&bytes).ok()
         } else {
             None
         }
@@ -64,7 +65,7 @@ impl NotesApp {
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent);
         }
-        if let Ok(content) = serde_json::to_string_pretty(&self.notes) {
+        if let Ok(content) = serde_json::to_vec(&self.notes) {
             let _ = fs::write(path, content);
         }
     }
@@ -118,6 +119,7 @@ impl NotesApp {
                         self.edit_canvas_items
                             .push(CanvasItem::Image(new_image_item));
                     }
+                    self.schedule_autosave(cx);
                     cx.notify();
                 }
             }
@@ -146,6 +148,27 @@ impl NotesApp {
             split_text_and_bold_at(&self.edit_body, &self.edit_body_underline, cursor);
         let (_, before_strike, _, after_strike) =
             split_text_and_bold_at(&self.edit_body, &self.edit_body_strike, cursor);
+        let (before_family, before_size, after_family, after_size) =
+            crate::text::styles::split_font_at(
+                &self.edit_body_font_family,
+                &self.edit_body_font_size,
+                cursor,
+            );
+        let (before_color, after_color) = split_u32(&self.edit_body_font_color, cursor);
+        let (before_bg, after_bg) = split_u32(&self.edit_body_bg_color, cursor);
+        let before_font_runs = crate::text::styles::font_vecs_to_runs(
+            &before_family,
+            &before_size,
+            &before_color,
+            &before_bg,
+        );
+        let after_font_runs = crate::text::styles::font_vecs_to_runs(
+            &after_family,
+            &after_size,
+            &after_color,
+            &after_bg,
+        );
+        let (before_layouts, after_layouts) = self.split_line_layouts_at(cursor);
 
         let mut replacement = Vec::new();
         if !before_text.is_empty() {
@@ -155,12 +178,15 @@ impl NotesApp {
                 italic_spans: crate::text::styles::bool_vec_to_spans(&before_italic),
                 underline_spans: crate::text::styles::bool_vec_to_spans(&before_underline),
                 strike_spans: crate::text::styles::bool_vec_to_spans(&before_strike),
+                font_runs: before_font_runs,
+                line_layouts: before_layouts,
             });
         }
         replacement.push(ContentBlock::Image {
             path: image_path,
             width: 240.0,
             height: 180.0,
+            offset_x: 0.0,
         });
         let after_pos = replacement.len();
         replacement.push(ContentBlock::Text {
@@ -169,17 +195,15 @@ impl NotesApp {
             italic_spans: crate::text::styles::bool_vec_to_spans(&after_italic),
             underline_spans: crate::text::styles::bool_vec_to_spans(&after_underline),
             strike_spans: crate::text::styles::bool_vec_to_spans(&after_strike),
+            font_runs: after_font_runs,
+            line_layouts: after_layouts.clone(),
         });
 
-        let Some(item) = self
-            .edit_canvas_items
-            .iter_mut()
-            .find(|i| match i {
-                CanvasItem::Text(t) => t.id == active_id,
-                CanvasItem::Mixed(m) => m.id == active_id,
-                CanvasItem::Image(_) => false,
-            })
-        else {
+        let Some(item) = self.edit_canvas_items.iter_mut().find(|i| match i {
+            CanvasItem::Text(t) => t.id == active_id,
+            CanvasItem::Mixed(m) => m.id == active_id,
+            CanvasItem::Image(_) => false,
+        }) else {
             return false;
         };
 
@@ -206,13 +230,49 @@ impl NotesApp {
 
         self.active_block_index = Some(new_active_block_index);
         self.edit_body = after_text;
+        self.edit_body_line_layouts = after_layouts;
+        self.bind_line_layouts();
         self.edit_body_bold = after_bold;
         self.edit_body_italic = after_italic;
         self.edit_body_underline = after_underline;
         self.edit_body_strike = after_strike;
+        self.edit_body_font_family = after_family;
+        self.edit_body_font_size = after_size;
+        self.edit_body_font_color = after_color;
+        self.edit_body_bg_color = after_bg;
         self.edit_body_cursor = 0;
         self.edit_body_anchor = None;
         true
+    }
+
+    /// Decodes any images in `items` that are not cached yet. The opening frame skips this.
+    pub(crate) fn prefetch_canvas_images(&mut self, items: &[CanvasItem]) {
+        if self.defer_images {
+            return;
+        }
+        self.prefetch_image_paths(&image_paths(items));
+    }
+
+    pub(crate) fn prefetch_image_paths(&mut self, paths: &[String]) {
+        if self.defer_images {
+            return;
+        }
+        for path in paths {
+            if self.image_cache.contains_key(path) {
+                continue;
+            }
+            if let Some(image) = self.decrypt_image(path) {
+                self.image_cache.insert(path.clone(), Arc::new(image));
+            }
+        }
+    }
+
+    /// Returns a cached image. Empty on the opening frame, before `prefetch_canvas_images`.
+    pub(crate) fn canvas_image(&self, path_str: &str) -> Option<Arc<gpui::Image>> {
+        if self.defer_images {
+            return None;
+        }
+        self.image_cache.get(path_str).cloned()
     }
 
     /// Loads an image from disk and decrypts it back into a `gpui::Image`.
@@ -252,4 +312,27 @@ impl NotesApp {
         }
         None
     }
+}
+
+fn split_u32(values: &[u32], cursor: usize) -> (Vec<u32>, Vec<u32>) {
+    let idx = cursor.min(values.len());
+    (values[..idx].to_vec(), values[idx..].to_vec())
+}
+
+fn image_paths(items: &[CanvasItem]) -> Vec<String> {
+    let mut paths = Vec::new();
+    for item in items {
+        match item {
+            CanvasItem::Image(image) => paths.push(image.path.clone()),
+            CanvasItem::Mixed(mixed) => {
+                for block in &mixed.blocks {
+                    if let ContentBlock::Image { path, .. } = block {
+                        paths.push(path.clone());
+                    }
+                }
+            }
+            CanvasItem::Text(_) => {}
+        }
+    }
+    paths
 }

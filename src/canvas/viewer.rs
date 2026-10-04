@@ -1,27 +1,32 @@
 //! Read-only canvas for the page that is currently open.
 
-use gpui::{
-    div, img, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButton, Window,
-};
-use std::sync::Arc;
+use gpui::{div, img, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButton, Window};
 
 use crate::app::NotesApp;
 use crate::canvas::canvas_top_tracker;
-use crate::constants::{
-    colors::{TEXT_HINT, TEXT_PRIMARY, TEXT_SECONDARY},
-    typography::{BUTTON_FONT_SIZE, HINT_FONT_SIZE},
-};
+use crate::constants::typography::BUTTON_FONT_SIZE;
 use crate::helpers::hash_str;
-use crate::models::{load_canvas_items, CanvasItem, ContentBlock, Note, NoteContent};
+use crate::models::{load_canvas_items, CanvasItem, ContentBlock, NoteContent};
 
 impl NotesApp {
+    /// Parses a page body once, then reuses that result until the page changes.
+    fn cached_page_items(&mut self, page_id: &str, body: &str) -> Vec<CanvasItem> {
+        if let Some((cached_id, items)) = &self.page_items_cache {
+            if cached_id == page_id {
+                return items.clone();
+            }
+        }
+        let items = load_canvas_items(body);
+        self.page_items_cache = Some((page_id.to_string(), items.clone()));
+        items
+    }
+
     /// Renders the read-only canvas viewer for a note after editing is finished.
     ///
     /// This method paints the saved canvas text blocks, images, and combined image+text boxes
     /// exactly as they were last serialized, while preserving the current viewer selection state.
     pub(crate) fn render_canvas_viewer(
         &mut self,
-        _note: &Note,
         content: &NoteContent,
         page_sidebar: AnyElement,
         _window: &mut Window,
@@ -29,19 +34,22 @@ impl NotesApp {
     ) -> impl IntoElement {
         let mut viewer_elements = Vec::new();
 
-        let active_page_items: Vec<CanvasItem> = {
-            let mut items = Vec::new();
-            if let Some(ref sec_id) = self.active_section_id {
-                if let Some(section) = content.sections.iter().find(|s| s.id == *sec_id) {
-                    if let Some(ref page_id) = self.active_page_id {
-                        if let Some(page) = section.pages.iter().find(|p| p.id == *page_id) {
-                            items = load_canvas_items(&page.body);
-                        }
-                    }
-                }
-            }
-            items
+        let open_page = {
+            let sec_id = self.active_section_id.as_deref();
+            let page_id = self.active_page_id.as_deref();
+            sec_id
+                .and_then(|sec_id| content.sections.iter().find(|section| section.id == sec_id))
+                .and_then(|section| {
+                    page_id.and_then(|page_id| section.pages.iter().find(|page| page.id == page_id))
+                })
+                .map(|page| (page.id.clone(), page.body.clone()))
         };
+        let active_page_items = if let Some((page_id, body)) = open_page {
+            self.cached_page_items(&page_id, &body)
+        } else {
+            Vec::new()
+        };
+        self.prefetch_canvas_images(&active_page_items);
 
         for item in &active_page_items {
             match item {
@@ -55,6 +63,8 @@ impl NotesApp {
                             italic: t.italic_spans.clone(),
                             underline: t.underline_spans.clone(),
                             strike: t.strike_spans.clone(),
+                            font_runs: t.font_runs.clone(),
+                            line_layouts: t.line_layouts.clone(),
                         },
                         t.x,
                         t.y,
@@ -66,13 +76,13 @@ impl NotesApp {
 
                 //  RENDER CANVAS-ITEM IMAGES FOR VIEW =========================================================================
                 CanvasItem::Image(img_item) => {
-                    if let Some(img_data) = self.decrypt_image(&img_item.path) {
-                        let source = gpui::ImageSource::Image(Arc::new(img_data));
+                    if let Some(img_data) = self.canvas_image(&img_item.path) {
+                        let source = gpui::ImageSource::Image(img_data);
                         let image_el = div()
                             .absolute()
-                            .left(px(img_item.x + self.pan_x))
-                            .top(px(img_item.y + self.pan_y))
-                            .w(px(img_item.width))
+                            .left(px(self.place_x(img_item.x)))
+                            .top(px(self.place_y(img_item.y)))
+                            .w(px(self.scaled(img_item.width)))
                             .h(px(img_item.height))
                             .on_mouse_down(
                                 MouseButton::Left,
@@ -111,8 +121,8 @@ impl NotesApp {
                             )
                             .child(
                                 img(source)
-                                    .w(px(img_item.width))
-                                    .h(px(img_item.height))
+                                    .w(px(self.scaled(img_item.width)))
+                                    .h(px(self.scaled(img_item.height)))
                                     .rounded(px(6.0))
                                     .border_1()
                                     .border_color(rgb(0x3d3d3d)),
@@ -126,19 +136,24 @@ impl NotesApp {
                     let mut y_cursor = m.y;
                     for (block_idx, block) in m.blocks.iter().enumerate() {
                         match block {
-                            ContentBlock::Image { path, width, height } => {
-                                if let Some(img_data) = self.decrypt_image(path) {
-                                    let source = gpui::ImageSource::Image(Arc::new(img_data));
+                            ContentBlock::Image {
+                                path,
+                                width,
+                                height,
+                                offset_x,
+                            } => {
+                                if let Some(img_data) = self.canvas_image(path) {
+                                    let source = gpui::ImageSource::Image(img_data);
                                     let image_el = div()
                                         .absolute()
-                                        .left(px(m.x + self.pan_x))
-                                        .top(px(y_cursor + self.pan_y))
-                                        .w(px(*width))
-                                        .h(px(*height))
+                                        .left(px(self.place_x(m.x + offset_x)))
+                                        .top(px(self.place_y(y_cursor)))
+                                        .w(px(self.scaled(*width)))
+                                        .h(px(self.scaled(*height)))
                                         .child(
                                             img(source)
-                                                .w(px(*width))
-                                                .h(px(*height))
+                                                .w(px(self.scaled(*width)))
+                                                .h(px(self.scaled(*height)))
                                                 .rounded(px(6.0))
                                                 .border_1()
                                                 .border_color(rgb(0x3d3d3d)),
@@ -153,6 +168,8 @@ impl NotesApp {
                                 italic_spans,
                                 underline_spans,
                                 strike_spans,
+                                font_runs,
+                                line_layouts,
                             } => {
                                 let seg_id = format!("{}::{}", m.id, block_idx);
                                 let line_count = text.split('\n').count().max(1) as f32;
@@ -164,6 +181,8 @@ impl NotesApp {
                                         italic: italic_spans.clone(),
                                         underline: underline_spans.clone(),
                                         strike: strike_spans.clone(),
+                                        font_runs: font_runs.clone(),
+                                        line_layouts: line_layouts.clone(),
                                     },
                                     m.x,
                                     y_cursor,
@@ -199,22 +218,11 @@ impl NotesApp {
             .id("note-viewer-canvas")
             .flex_1()
             .relative()
-            .bg(rgb(0x141414))
+            .bg(rgb(crate::constants::colors::NOTE_PAGE))
             .overflow_hidden()
             .cursor_default()
             .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
-                match event.delta {
-                    gpui::ScrollDelta::Pixels(point) => {
-                        this.pan_x = (this.pan_x + point.x.as_f32()).min(0.0);
-                        this.pan_y = (this.pan_y + point.y.as_f32()).min(0.0);
-                        cx.notify();
-                    }
-                    gpui::ScrollDelta::Lines(point) => {
-                        this.pan_x = (this.pan_x + point.x * 20.0).min(0.0);
-                        this.pan_y = (this.pan_y + point.y * 20.0).min(0.0);
-                        cx.notify();
-                    }
-                }
+                this.handle_canvas_scroll(event, cx);
             }))
             .on_mouse_down(
                 MouseButton::Left,
@@ -229,7 +237,9 @@ impl NotesApp {
             )
             .on_mouse_move(
                 cx.listener(move |this, event: &gpui::MouseMoveEvent, window, cx| {
-                    if this.is_selecting_viewer_text {
+                    if this.drag_page_sidebar(event.position.x.as_f32()) {
+                        cx.notify();
+                    } else if this.is_selecting_viewer_text {
                         this.queue_selection_drag(
                             crate::canvas::selection_overlay::HighlightKind::Viewer,
                             event.position,
@@ -261,32 +271,46 @@ impl NotesApp {
                         this.pan_start_val = None;
                         cx.notify();
                     }
+                    this.page_sidebar_resizing = false;
                 }),
             )
-            .child(
-                div()
-                    .absolute()
-                    .top(px(
-                        crate::constants::layout::HEADING_PADDING_TOP
-                            + self.page_heading_font_size
-                            + 14.0,
-                    ))
-                    .left(px(crate::constants::layout::HEADING_PADDING_LEFT))
-                    .text_size(px(HINT_FONT_SIZE))
-                    .text_color(rgb(TEXT_HINT))
-                    .child("💡 Drag the background to pan the canvas"),
-            )
+            // Pin instruction, hidden for now.
+            // .child(
+            //     div()
+            //         .absolute()
+            //         .top(px(
+            //             crate::constants::layout::HEADING_PADDING_TOP
+            //                 + self.page_heading_font_size
+            //                 + 14.0,
+            //         ))
+            //         .left(px(crate::constants::layout::HEADING_PADDING_LEFT))
+            //         .text_size(px(HINT_FONT_SIZE))
+            //         .text_color(rgb(TEXT_HINT))
+            //         .child("💡 Drag the background to pan the canvas"),
+            // )
             .child(canvas_top_tracker(entity))
             .children(viewer_elements)
             .child(
                 div()
                     .absolute()
-                    .top(px(crate::constants::layout::HEADING_PADDING_TOP + self.pan_y))
-                    .left(px(crate::constants::layout::HEADING_PADDING_LEFT + self.pan_x))
-                    .text_size(px(self.page_heading_font_size))
-                    .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(rgb(0xffffff))
-                    .child(page_name),
+                    .top(px(
+                        self.place_y(crate::constants::layout::HEADING_PADDING_TOP)
+                    ))
+                    .left(px(
+                        self.place_x(crate::constants::layout::HEADING_PADDING_LEFT)
+                    ))
+                    .child(
+                        self.page_title_with_rule(
+                            div()
+                                .text_size(px(self.scaled(self.page_heading_font_size)))
+                                .whitespace_nowrap()
+                                .font_weight(gpui::FontWeight::BOLD)
+                                .text_color(rgb(crate::constants::colors::NOTE_INK))
+                                .child(page_name.clone())
+                                .into_any_element(),
+                            &page_name,
+                        ),
+                    ),
             );
 
         let section_tabs = {
@@ -298,22 +322,25 @@ impl NotesApp {
 
                 let mut tab_el = div()
                     .id(("sec-tab", hash_str(&sec_id)))
-                    .px(px(6.0))
-                    .py(px(2.0))
+                    .px(px(10.0))
+                    .py(px(4.0))
+                    .font_family("Calibri")
                     .text_size(px(self.section_name_font_size))
                     .bg(if is_active {
-                        rgb(0x1e1e1e)
+                        rgb(crate::constants::colors::ONENOTE_PAGE_SELECTED)
                     } else {
-                        rgb(0x2d2d2d)
+                        rgb(crate::constants::colors::ONENOTE_TAB_IDLE)
                     });
-                if is_active {
-                    tab_el = tab_el.border_t_2().border_color(rgb(0x0078d4));
-                }
+                tab_el = tab_el.border_t_2().border_color(if is_active {
+                    rgb(crate::constants::colors::ONENOTE_ACCENT)
+                } else {
+                    rgb(crate::constants::colors::ONENOTE_TAB_IDLE)
+                });
                 tab_el = tab_el
                     .text_color(if is_active {
-                        rgb(0xffffff)
+                        rgb(crate::constants::colors::ONENOTE_INK)
                     } else {
-                        rgb(TEXT_SECONDARY)
+                        rgb(crate::constants::colors::ONENOTE_INK_MUTED)
                     })
                     .font_weight(if is_active {
                         gpui::FontWeight::BOLD
@@ -321,6 +348,13 @@ impl NotesApp {
                         gpui::FontWeight::NORMAL
                     })
                     .cursor_pointer()
+                    .hover(|style| {
+                        if is_active {
+                            style
+                        } else {
+                            style.bg(rgb(crate::constants::colors::ONENOTE_TAB_HOVER))
+                        }
+                    })
                     .on_click(cx.listener(move |this, _, _, cx| {
                         this.switch_to_section(click_id.clone(), cx);
                     }))
@@ -332,45 +366,30 @@ impl NotesApp {
                 tabs.push(tab_el.into_any_element());
             }
 
-            let left_side = div().flex().flex_row().gap(px(4.0)).children(tabs);
+            let mut left_side = div().flex().flex_row().items_center().gap(px(4.0));
+            if !self.is_sidebar_open {
+                left_side = left_side.child(self.render_note_switcher(cx));
+            }
+            let left_side = left_side.children(tabs);
 
-            let right_side = div()
-                .flex()
-                .gap(px(6.0))
-                .child(
-                    div()
-                        .id("edit-note-header-btn")
-                        .px(px(5.0))
-                        .py(px(2.0))
-                        .bg(rgb(0x2d2d2d))
-                        .hover(|s| s.bg(rgb(0x3d3d3d)))
-                        .rounded(px(4.0))
-                        .cursor_pointer()
-                        .text_size(px(BUTTON_FONT_SIZE))
-                        .text_color(rgb(TEXT_PRIMARY))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.start_edit(cx);
-                        }))
-                        .child("Edit Note"),
-                )
-                .child(
-                    div()
-                        .id("delete-note-header-btn")
-                        .px(px(5.0))
-                        .py(px(2.0))
-                        .bg(rgb(0x5a2a2a))
-                        .hover(|s| s.bg(rgb(0x6a3a3a)))
-                        .rounded(px(4.0))
-                        .cursor_pointer()
-                        .text_size(px(BUTTON_FONT_SIZE))
-                        .text_color(rgb(0xff6b6b))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            if let Some(ref id) = this.selected_note_id {
-                                this.delete_note(id.clone(), cx);
-                            }
-                        }))
-                        .child("Delete Note"),
-                );
+            let right_side = div().flex().gap(px(6.0)).child(
+                div()
+                    .id("delete-note-header-btn")
+                    .px(px(5.0))
+                    .py(px(2.0))
+                    .bg(rgb(0x5a2a2a))
+                    .hover(|s| s.bg(rgb(0x6a3a3a)))
+                    .rounded(px(4.0))
+                    .cursor_pointer()
+                    .text_size(px(BUTTON_FONT_SIZE))
+                    .text_color(rgb(0xff6b6b))
+                    .on_click(cx.listener(move |this, _, _, cx| {
+                        if let Some(ref id) = this.selected_note_id {
+                            this.delete_note(id.clone(), cx);
+                        }
+                    }))
+                    .child("Delete Note"),
+            );
 
             div()
                 .flex()
@@ -381,22 +400,27 @@ impl NotesApp {
                 .child(right_side)
         };
 
-        div()
+        let canvas_container = canvas_container.child(self.render_canvas_view_toggle(cx));
+
+        let mut page = div()
             .flex()
             .flex_col()
             .flex_1()
             .h_full()
-            .bg(rgb(0x1e1e1e))
-            .gap(px(6.0))
-            .child(section_tabs)
-            .child(
-                div()
-                    .flex()
-                    .flex_row()
-                    .flex_1()
-                    .h_full()
-                    .child(canvas_container)
-                    .child(page_sidebar),
-            )
+            .bg(rgb(crate::constants::colors::ONENOTE_BAR))
+            .gap(px(0.0));
+        if !self.full_page_view {
+            page = page.child(section_tabs);
+        }
+        let mut body = div()
+            .flex()
+            .flex_row()
+            .flex_1()
+            .h_full()
+            .child(canvas_container);
+        if !self.full_page_view {
+            body = body.child(page_sidebar);
+        }
+        page.child(body)
     }
 }

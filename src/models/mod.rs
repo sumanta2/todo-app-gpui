@@ -5,8 +5,8 @@
 mod canvas;
 
 pub(crate) use canvas::{
-    load_canvas_items, save_canvas_items, CanvasItem, ContentBlock, ImageItem, MixedItem, TextItem,
-    TextStyleSpans,
+    load_canvas_items, save_canvas_items, CanvasItem, ContentBlock, FontRun, ImageItem, LineLayout,
+    MixedItem, TextItem, TextStyleSpans,
 };
 
 /// A single saved notebook item persisted to the app's JSON store.

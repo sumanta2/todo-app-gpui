@@ -27,6 +27,27 @@ pub(crate) struct TextItem {
     pub(crate) underline_spans: Vec<(usize, usize)>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub(crate) strike_spans: Vec<(usize, usize)>,
+    /// Runs whose family or size differs from Calibri 11pt. Empty means the whole block uses that default.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) font_runs: Vec<FontRun>,
+    /// Indent and alignment for each visual line. Missing lines use the default.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub(crate) line_layouts: Vec<LineLayout>,
+}
+
+/// A contiguous character range that shares one font family and size.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+pub(crate) struct FontRun {
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+    pub(crate) family: String,
+    pub(crate) size: f32,
+    /// Text color. `0` means the default body color.
+    #[serde(default)]
+    pub(crate) color: u32,
+    /// Highlight color. `0` means no background.
+    #[serde(default)]
+    pub(crate) background: u32,
 }
 
 /// The four character-style span lists that belong to one text segment.
@@ -36,6 +57,18 @@ pub(crate) struct TextStyleSpans {
     pub(crate) italic: Vec<(usize, usize)>,
     pub(crate) underline: Vec<(usize, usize)>,
     pub(crate) strike: Vec<(usize, usize)>,
+    pub(crate) font_runs: Vec<FontRun>,
+    pub(crate) line_layouts: Vec<LineLayout>,
+}
+
+/// Indent level and horizontal alignment of one visual line.
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct LineLayout {
+    #[serde(default)]
+    pub(crate) indent: u8,
+    /// `0` left, `1` center, `2` right.
+    #[serde(default)]
+    pub(crate) align: u8,
 }
 
 /// Image block stored on the canvas with its dimensions and disk path.
@@ -63,11 +96,18 @@ pub(crate) enum ContentBlock {
         underline_spans: Vec<(usize, usize)>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         strike_spans: Vec<(usize, usize)>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        font_runs: Vec<FontRun>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        line_layouts: Vec<LineLayout>,
     },
     Image {
         path: String,
         width: f32,
         height: f32,
+        /// Distance from the left edge of the text box. `0` sits the image flush left.
+        #[serde(default)]
+        offset_x: f32,
     },
 }
 
@@ -100,6 +140,8 @@ pub(crate) fn load_canvas_items(body: &str) -> Vec<CanvasItem> {
                 italic_spans: Vec::new(),
                 underline_spans: Vec::new(),
                 strike_spans: Vec::new(),
+                font_runs: Vec::new(),
+                line_layouts: Vec::new(),
             })]
         }
     }
@@ -159,6 +201,7 @@ fn merge_overlapping_text_and_image(items: Vec<CanvasItem>) -> Vec<CanvasItem> {
                         path: image.path,
                         width: img_w,
                         height: img_h,
+                        offset_x: 0.0,
                     },
                     ContentBlock::Text {
                         text: t.text.clone(),
@@ -166,6 +209,8 @@ fn merge_overlapping_text_and_image(items: Vec<CanvasItem>) -> Vec<CanvasItem> {
                         italic_spans: t.italic_spans.clone(),
                         underline_spans: t.underline_spans.clone(),
                         strike_spans: t.strike_spans.clone(),
+                        font_runs: t.font_runs.clone(),
+                        line_layouts: t.line_layouts.clone(),
                     },
                 ],
             }));

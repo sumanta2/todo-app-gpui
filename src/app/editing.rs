@@ -14,15 +14,20 @@ impl NotesApp {
     /// selection, and starts the cursor-blink timer used by the editor UI.
     /// This constructor is called from the app startup in main.rs:66:NotesApp::new using this syntax
     pub(crate) fn new(cx: &mut Context<Self>) -> Self {
-
         // this below "load_note" function present at src\app\storage.rs filed
-        let notes = Self::load_notes().unwrap_or_default();   
+        let notes = Self::load_notes().unwrap_or_default();
         let selected_note_id = notes.first().map(|n| n.id.clone());
 
         let mut app = Self {
             notes,
             selected_note_id,
+            view_content: None,
+            page_items_cache: None,
+            image_cache: std::collections::HashMap::new(),
+            defer_images: true,
             is_editing: false,
+            note_dirty: false,
+            save_queued: false,
             active_field: ActiveField::Heading,
             edit_heading: String::new(),
             edit_heading_cursor: 0,
@@ -37,6 +42,12 @@ impl NotesApp {
             edit_body_italic: Vec::new(),
             edit_body_underline: Vec::new(),
             edit_body_strike: Vec::new(),
+            edit_body_font_family: Vec::new(),
+            edit_body_font_size: Vec::new(),
+            edit_body_font_color: Vec::new(),
+            edit_body_bg_color: Vec::new(),
+            edit_body_line_layouts: Vec::new(),
+            line_layout_anchor: String::new(),
             body_layout_stamp: 0,
             body_hit_cache: None,
             viewer_hit_cache: None,
@@ -51,14 +62,18 @@ impl NotesApp {
             active_text_block_id: None,
             pending_caret: None,
             hovered_canvas_item_id: None,
+            hovered_canvas_edge_id: None,
             drag_item_id: None,
             drag_start_mouse: None,
             drag_start_item_pos: None,
             resize_item_id: None,
             resize_start_mouse: None,
             resize_start_size: None,
+            selected_inline_image: None,
+            inline_image_gesture: None,
             pan_x: 0.0,
             pan_y: 0.0,
+            canvas_zoom: 1.0,
             is_panning: false,
             pan_has_dragged: false,
             pan_start_mouse: None,
@@ -79,8 +94,30 @@ impl NotesApp {
             edit_section_name_anchor: None,
             is_selecting_section_name: false,
             active_section_tab_x: 0.0,
-            is_sidebar_open: false,
+            is_sidebar_open: true,
+            title_search: String::new(),
+            title_search_focused: false,
+            note_menu_open: false,
+            page_sidebar_width: 180.0,
+            page_sidebar_resizing: false,
+            page_sidebar_resize_start_x: 0.0,
+            page_sidebar_resize_start_w: 180.0,
             home_menu_open: false,
+            view_menu_open: false,
+            zoom_menu_open: false,
+            full_page_view: false,
+            font_style_menu_open: false,
+            font_size_menu_open: false,
+            typing_font_family: 0,
+            typing_font_size_px: crate::constants::typography::CANVAS_BODY_FONT_SIZE,
+            font_color_menu_open: false,
+            bg_color_menu_open: false,
+            typing_font_color: 0,
+            typing_bg_color: 0,
+            font_color_pinned: false,
+            font_color_pin_at: None,
+            bg_color_pinned: false,
+            bg_color_pin_at: None,
             viewer_active_text_block_id: None,
             viewer_text_cursor: 0,
             viewer_text_anchor: None,
@@ -134,6 +171,9 @@ impl NotesApp {
         .detach();
 
         app.initialize_active_section_page();
+        if app.selected_note_id.is_some() {
+            app.start_edit(cx);
+        }
         app
     }
 
@@ -210,15 +250,25 @@ impl NotesApp {
     /// edits the selection, or leaves a text block.
     pub(crate) fn sync_active_text_block(&mut self) {
         if self.active_field == ActiveField::Body {
+            self.reconcile_line_layouts();
             if let Some(ref active_id) = self.active_text_block_id {
                 let pan_x = self.pan_x;
                 let window_w = self.window_w;
-                let is_sidebar_open = self.is_sidebar_open;
+                let sidebar_w = self.layout_sidebar_w();
+                let page_sidebar_w = self.layout_page_sidebar_w();
                 let edit_body = self.edit_body.clone();
                 let edit_body_bold = self.edit_body_bold.clone();
                 let edit_body_italic = self.edit_body_italic.clone();
                 let edit_body_underline = self.edit_body_underline.clone();
                 let edit_body_strike = self.edit_body_strike.clone();
+                let line_layouts =
+                    crate::app::paragraph::saved_line_layouts(&self.edit_body_line_layouts);
+                let font_runs = crate::text::styles::font_vecs_to_runs(
+                    &self.edit_body_font_family,
+                    &self.edit_body_font_size,
+                    &self.edit_body_font_color,
+                    &self.edit_body_bg_color,
+                );
                 let active_block_index = self.active_block_index;
 
                 let line_text_w = crate::text::selection::max_text_advance(
@@ -228,27 +278,25 @@ impl NotesApp {
                     self.font_type(),
                 );
                 let needed_width = line_text_w + 24.0;
-                let sidebar_w = if is_sidebar_open { 220.0 } else { 44.0 };
-                let page_sidebar_w = 180.0;
-                let canvas_visible_w =
-                    (window_w - sidebar_w - page_sidebar_w - 30.0).max(300.0);
+                let canvas_visible_w = (window_w - sidebar_w - page_sidebar_w - 30.0).max(300.0);
 
-                if let Some(item) = self
-                    .edit_canvas_items
-                    .iter_mut()
-                    .find(|i| match i {
-                        CanvasItem::Text(t) => t.id == *active_id,
-                        CanvasItem::Mixed(m) => m.id == *active_id,
-                        CanvasItem::Image(_) => false,
-                    })
-                {
+                if let Some(item) = self.edit_canvas_items.iter_mut().find(|i| match i {
+                    CanvasItem::Text(t) => t.id == *active_id,
+                    CanvasItem::Mixed(m) => m.id == *active_id,
+                    CanvasItem::Image(_) => false,
+                }) {
                     match item {
                         CanvasItem::Text(t) => {
                             t.text = edit_body;
                             t.bold_spans = crate::text::styles::bool_vec_to_spans(&edit_body_bold);
-                            t.italic_spans = crate::text::styles::bool_vec_to_spans(&edit_body_italic);
-                            t.underline_spans = crate::text::styles::bool_vec_to_spans(&edit_body_underline);
-                            t.strike_spans = crate::text::styles::bool_vec_to_spans(&edit_body_strike);
+                            t.italic_spans =
+                                crate::text::styles::bool_vec_to_spans(&edit_body_italic);
+                            t.underline_spans =
+                                crate::text::styles::bool_vec_to_spans(&edit_body_underline);
+                            t.strike_spans =
+                                crate::text::styles::bool_vec_to_spans(&edit_body_strike);
+                            t.font_runs = font_runs.clone();
+                            t.line_layouts = line_layouts.clone();
 
                             let base_w = t.width.unwrap_or(250.0);
                             let desired_w = needed_width.max(base_w).max(250.0);
@@ -264,14 +312,22 @@ impl NotesApp {
                                     italic_spans,
                                     underline_spans,
                                     strike_spans,
+                                    font_runs: block_font_runs,
+                                    line_layouts: block_line_layouts,
                                 }) = m.blocks.get_mut(idx)
                                 {
                                     *text = edit_body;
-                                    *bold_spans = crate::text::styles::bool_vec_to_spans(&edit_body_bold);
-                                    *italic_spans = crate::text::styles::bool_vec_to_spans(&edit_body_italic);
-                                    *underline_spans =
-                                        crate::text::styles::bool_vec_to_spans(&edit_body_underline);
-                                    *strike_spans = crate::text::styles::bool_vec_to_spans(&edit_body_strike);
+                                    *bold_spans =
+                                        crate::text::styles::bool_vec_to_spans(&edit_body_bold);
+                                    *italic_spans =
+                                        crate::text::styles::bool_vec_to_spans(&edit_body_italic);
+                                    *underline_spans = crate::text::styles::bool_vec_to_spans(
+                                        &edit_body_underline,
+                                    );
+                                    *strike_spans =
+                                        crate::text::styles::bool_vec_to_spans(&edit_body_strike);
+                                    *block_font_runs = font_runs.clone();
+                                    *block_line_layouts = line_layouts.clone();
                                 }
                             }
 
@@ -291,45 +347,68 @@ impl NotesApp {
         }
     }
 
-    /// Persists the current note edit session back to the selected note object.
-    pub(crate) fn save_edit(&mut self, cx: &mut Context<Self>) {
+    /// Writes the open edit session to `notes.json` without leaving edit mode.
+    ///
+    /// Scroll position, the caret, and the open page stay as they are. Nothing is written
+    /// when the session has no unsaved changes.
+    pub(crate) fn persist_edit(&mut self) {
+        if !self.is_editing {
+            return;
+        }
         self.sync_current_page_state();
-
-        if let Some(ref selected_id) = self.selected_note_id {
-            if let Some(note) = self.notes.iter_mut().find(|n| n.id == *selected_id) {
-                note.heading = self.edit_note_heading.clone();
-
-                if let Some(ref content) = self.edit_content {
-                    note.body = serde_json::to_string(content).unwrap_or_default();
-
-                    let mut all_images = Vec::new();
-                    for section in &content.sections {
-                        for page in &section.pages {
-                            if let Some(ref imgs) = page.images {
-                                for img in imgs {
-                                    if !all_images.contains(img) {
-                                        all_images.push(img.clone());
-                                    }
+        if !self.note_dirty {
+            return;
+        }
+        let Some(selected_id) = self.selected_note_id.clone() else {
+            self.note_dirty = false;
+            return;
+        };
+        if let Some(note) = self.notes.iter_mut().find(|n| n.id == selected_id) {
+            note.heading = self.edit_note_heading.clone();
+            if let Some(ref content) = self.edit_content {
+                note.body = serde_json::to_string(content).unwrap_or_default();
+                let mut all_images = Vec::new();
+                for section in &content.sections {
+                    for page in &section.pages {
+                        if let Some(ref imgs) = page.images {
+                            for img in imgs {
+                                if !all_images.contains(img) {
+                                    all_images.push(img.clone());
                                 }
                             }
                         }
                     }
-                    note.images = Some(all_images);
                 }
-
-                self.is_editing = false;
-                self.pending_caret = None;
-                self.save_notes();
-                cx.notify();
+                note.images = Some(all_images);
             }
         }
+        self.note_dirty = false;
+        self.save_notes();
     }
 
-    /// Exits edit mode without saving changes to the note payload.
-    pub(crate) fn cancel_edit(&mut self, cx: &mut Context<Self>) {
-        self.is_editing = false;
-        self.pending_caret = None;
-        cx.notify();
+    /// Marks the edit session dirty and writes it after a short idle pause.
+    pub(crate) fn schedule_autosave(&mut self, cx: &mut Context<Self>) {
+        if !self.is_editing {
+            return;
+        }
+        self.note_dirty = true;
+        if self.save_queued {
+            return;
+        }
+        self.save_queued = true;
+        cx.spawn(|this: gpui::WeakEntity<Self>, cx: &mut gpui::AsyncApp| {
+            let mut cx = cx.clone();
+            async move {
+                cx.background_executor()
+                    .timer(std::time::Duration::from_millis(700))
+                    .await;
+                let _ = this.update(&mut cx, |this, _cx| {
+                    this.save_queued = false;
+                    this.persist_edit();
+                });
+            }
+        })
+        .detach();
     }
 
     /// Drops text boxes that have no visible characters so a later click can start clean.
@@ -394,6 +473,8 @@ impl NotesApp {
             italic_spans: Vec::new(),
             underline_spans: Vec::new(),
             strike_spans: Vec::new(),
+            font_runs: Vec::new(),
+            line_layouts: Vec::new(),
         }));
         self.active_text_block_id = Some(new_id);
         self.active_block_index = None;
@@ -414,6 +495,7 @@ impl NotesApp {
         text_top: f32,
     ) {
         self.pending_caret = None;
+        self.selected_inline_image = None;
         self.sync_active_text_block();
         self.active_text_block_id = Some(id.to_string());
         self.active_block_index = block_index;
@@ -421,7 +503,12 @@ impl NotesApp {
         if self.capture_segment(id, block_index).is_none() {
             return;
         }
-        self.edit_body_cursor = end_of_line_at(&self.edit_body, text_top, click_y, self.canvas_line_height());
+        self.edit_body_cursor = end_of_line_at(
+            &self.edit_body,
+            text_top,
+            click_y,
+            self.canvas_line_height(),
+        );
         self.edit_body_anchor = None;
         self.is_selecting_body = false;
         self.cursor_visible = true;
@@ -432,7 +519,11 @@ impl NotesApp {
     ///
     /// Empty canvas beside a box is not a hit. The third value is the y of the first text line,
     /// used to choose which line the caret joins.
-    pub(crate) fn text_target_at(&self, click_x: f32, click_y: f32) -> Option<(String, Option<usize>, f32)> {
+    pub(crate) fn text_target_at(
+        &self,
+        click_x: f32,
+        click_y: f32,
+    ) -> Option<(String, Option<usize>, f32)> {
         let line_h = self.canvas_line_height();
 
         for item in &self.edit_canvas_items {
@@ -442,10 +533,7 @@ impl NotesApp {
                     let text_top = t.y + TEXT_BOX_TEXT_TOP;
                     let bottom = text_top + lines * line_h + 6.0;
                     let width = t.width.unwrap_or(250.0);
-                    if click_x >= t.x
-                        && click_x < t.x + width
-                        && click_y >= t.y
-                        && click_y < bottom
+                    if click_x >= t.x && click_x < t.x + width && click_y >= t.y && click_y < bottom
                     {
                         return Some((t.id.clone(), None, text_top));
                     }
@@ -491,7 +579,10 @@ impl NotesApp {
         self.active_block_index = None;
         self.edit_body_cursor = 0;
         self.edit_body_anchor = None;
-        self.pending_caret = Some((x + TEXT_BOX_CHROME_X, y + TEXT_BOX_TEXT_TOP + TEXT_CARET_NUDGE_Y));
+        self.pending_caret = Some((
+            x + TEXT_BOX_CHROME_X,
+            y + TEXT_BOX_TEXT_TOP + TEXT_CARET_NUDGE_Y,
+        ));
         self.cursor_visible = true;
     }
 }
@@ -499,6 +590,31 @@ impl NotesApp {
 /// Gap from the box origin to the text, matching the header, border, and padding.
 const TEXT_BOX_CHROME_X: f32 = 6.0;
 const TEXT_BOX_TEXT_TOP: f32 = 18.0;
+
+/// Screen pixels from the top of a mixed box to the first line of one text segment.
+///
+/// A mixed box stacks a 12px header, then images and text. The text under an image does not
+/// start at the header, so hit testing has to skip every block above that segment.
+pub(crate) fn mixed_text_line_screen_top(
+    blocks: &[ContentBlock],
+    block_index: usize,
+    line_h: f32,
+    zoom: f32,
+    border: f32,
+) -> f32 {
+    let zoom = if zoom <= 0.05 { 1.0 } else { zoom };
+    let mut screen = border + 12.0;
+    for block in blocks.iter().take(block_index) {
+        match block {
+            ContentBlock::Image { height, .. } => screen += *height * zoom,
+            ContentBlock::Text { text, .. } => {
+                let lines = text.split('\n').count().max(1) as f32;
+                screen += 10.0 + lines * line_h * zoom;
+            }
+        }
+    }
+    screen + 5.0
+}
 const TEXT_BOX_HEADER_H: f32 = 12.0;
 const TEXT_CARET_NUDGE_Y: f32 = 2.0;
 
@@ -572,4 +688,46 @@ fn mixed_text_band(
             })
         })?;
     Some((chosen.0, chosen.2, box_bottom))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::mixed_text_line_screen_top;
+    use crate::models::ContentBlock;
+
+    fn text_block(text: &str) -> ContentBlock {
+        ContentBlock::Text {
+            text: text.to_string(),
+            bold_spans: Vec::new(),
+            italic_spans: Vec::new(),
+            underline_spans: Vec::new(),
+            strike_spans: Vec::new(),
+            font_runs: Vec::new(),
+            line_layouts: Vec::new(),
+        }
+    }
+
+    fn image_block(height: f32) -> ContentBlock {
+        ContentBlock::Image {
+            path: String::new(),
+            width: 80.0,
+            height,
+            offset_x: 0.0,
+        }
+    }
+
+    #[test]
+    fn text_under_an_image_starts_below_that_image() {
+        let blocks = vec![image_block(100.0), text_block("under")];
+        let top = mixed_text_line_screen_top(&blocks, 1, 20.0, 1.0, 1.0);
+        // Border 1 + header 12 + image 100 + segment padding 5.
+        assert!((top - 118.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn first_text_segment_still_starts_under_the_header() {
+        let blocks = vec![text_block("hello"), image_block(40.0)];
+        let top = mixed_text_line_screen_top(&blocks, 0, 20.0, 1.0, 1.0);
+        assert!((top - 18.0).abs() < 0.01);
+    }
 }

@@ -22,6 +22,20 @@ impl NotesApp {
         let control = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
         let shift = event.keystroke.modifiers.shift;
 
+        // Shortcut: Ctrl + Plus / Minus / 0 zoom the canvas. Ctrl+scroll and pinch do the same.
+        if control && !shift && (key == "=" || key == "+" || key.eq_ignore_ascii_case("plus")) {
+            self.zoom_by(1.1, (0.0, 0.0), cx);
+            return;
+        }
+        if control && !shift && (key == "-" || key == "_" || key.eq_ignore_ascii_case("minus")) {
+            self.zoom_by(1.0 / 1.1, (0.0, 0.0), cx);
+            return;
+        }
+        if control && !shift && key == "0" {
+            self.reset_canvas_zoom(cx);
+            return;
+        }
+
         // Shortcut: Ctrl + N (Create New Note)
         if control && key.eq_ignore_ascii_case("n") {
             self.create_note(cx);
@@ -46,20 +60,63 @@ impl NotesApp {
             return;
         }
 
-        // Shortcut: Escape (Discard changes or close menu)
-        if key.eq_ignore_ascii_case("escape") {
-            if self.home_menu_open {
-                self.home_menu_open = false;
+        if self.title_search_focused && !control {
+            if key.eq_ignore_ascii_case("escape") {
+                self.title_search_focused = false;
                 cx.notify();
                 return;
             }
-            if self.is_editing {
-                self.cancel_edit(cx);
-            } else {
-                self.viewer_text_anchor = None;
-                self.viewer_active_text_block_id = None;
-                self.is_selecting_viewer_text = false;
+            if key == "backspace" {
+                self.title_search.pop();
+                cx.notify();
+                return;
             }
+            if key == "space" {
+                self.title_search.push(' ');
+                cx.notify();
+                return;
+            }
+            if let Some(ch) = key.chars().next() {
+                if key.chars().count() == 1 && !ch.is_control() {
+                    let ch = if shift { ch.to_ascii_uppercase() } else { ch };
+                    self.title_search.push(ch);
+                    cx.notify();
+                    return;
+                }
+            }
+            return;
+        }
+
+        // Shortcut: Escape closes the Home menu or clears the current selection.
+        if key.eq_ignore_ascii_case("escape") {
+            if self.home_menu_open
+                || self.view_menu_open
+                || self.note_menu_open
+                || self.zoom_menu_open
+                || self.font_style_menu_open
+                || self.font_size_menu_open
+                || self.font_color_menu_open
+                || self.bg_color_menu_open
+            {
+                self.home_menu_open = false;
+                self.view_menu_open = false;
+                self.note_menu_open = false;
+                self.zoom_menu_open = false;
+                self.font_style_menu_open = false;
+                self.font_size_menu_open = false;
+                self.font_color_menu_open = false;
+                self.bg_color_menu_open = false;
+                cx.notify();
+                return;
+            }
+            self.edit_body_anchor = None;
+            self.edit_heading_anchor = None;
+            self.edit_section_name_anchor = None;
+            self.edit_note_heading_anchor = None;
+            self.pending_caret = None;
+            self.viewer_text_anchor = None;
+            self.viewer_active_text_block_id = None;
+            self.is_selecting_viewer_text = false;
             cx.notify();
             return;
         }
@@ -67,47 +124,7 @@ impl NotesApp {
         if !self.is_editing {
             if control {
                 if key.eq_ignore_ascii_case("c") {
-                    if let Some(ref active_id) = self.viewer_active_text_block_id {
-                        if let Some(note) = self.selected_note() {
-                            let content = load_note_content(&note.body, &note.images);
-                            if let Some(ref sec_id) = self.active_section_id {
-                                if let Some(section) =
-                                    content.sections.iter().find(|s| s.id == *sec_id)
-                                {
-                                    if let Some(ref page_id) = self.active_page_id {
-                                        if let Some(page) =
-                                            section.pages.iter().find(|p| p.id == *page_id)
-                                        {
-                                            let items = load_canvas_items(&page.body);
-                                            if let Some(CanvasItem::Text(t)) =
-                                                items.iter().find(|item| match item {
-                                                    CanvasItem::Text(tx) => tx.id == *active_id,
-                                                    _ => false,
-                                                })
-                                            {
-                                                if let Some((start, end)) = get_selection_range(
-                                                    self.viewer_text_cursor,
-                                                    self.viewer_text_anchor,
-                                                ) {
-                                                    let selected_chars: String = t
-                                                        .text
-                                                        .chars()
-                                                        .skip(start)
-                                                        .take(end - start)
-                                                        .collect();
-                                                    cx.write_to_clipboard(
-                                                        gpui::ClipboardItem::new_string(
-                                                            selected_chars,
-                                                        ),
-                                                    );
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    self.copy_selection(cx);
                 } else if key.eq_ignore_ascii_case("a") {
                     if let Some(ref active_id) = self.viewer_active_text_block_id {
                         if let Some(note) = self.selected_note() {
@@ -139,12 +156,6 @@ impl NotesApp {
                     }
                 }
             }
-            return;
-        }
-
-        // Shortcut: Ctrl + Enter (Save changes)
-        if control && key.eq_ignore_ascii_case("enter") {
-            self.save_edit(cx);
             return;
         }
 
@@ -185,11 +196,14 @@ impl NotesApp {
                                         italic: t.italic_spans.clone(),
                                         underline: t.underline_spans.clone(),
                                         strike: t.strike_spans.clone(),
+                                        font_runs: t.font_runs.clone(),
+                                        line_layouts: t.line_layouts.clone(),
                                     },
                                     len,
                                 );
                                 self.edit_body_cursor = self.edit_body.chars().count();
                                 self.edit_body_anchor = None;
+                                self.bind_line_layouts();
                             }
                         } else {
                             let new_id = chrono::Local::now().timestamp_millis().to_string();
@@ -203,6 +217,8 @@ impl NotesApp {
                                 italic_spans: Vec::new(),
                                 underline_spans: Vec::new(),
                                 strike_spans: Vec::new(),
+                                font_runs: Vec::new(),
+                                line_layouts: Vec::new(),
                             };
                             self.edit_canvas_items.push(CanvasItem::Text(new_text_item));
                             self.active_text_block_id = Some(new_id);
@@ -216,9 +232,9 @@ impl NotesApp {
                 }
                 ActiveField::Body => {
                     if self.active_field == ActiveField::Body {
-                    self.touch_body_layout();
-                }
-                self.sync_active_text_block();
+                        self.touch_body_layout();
+                    }
+                    self.sync_active_text_block();
                     self.active_field = ActiveField::NoteHeading;
                 }
             }
@@ -226,19 +242,15 @@ impl NotesApp {
             return;
         }
 
-        // Shortcut: Ctrl + V image paste check (before borrowing self fields mutably)
-        if control && key.eq_ignore_ascii_case("v") {
-            let mut pasted_image = false;
-            if let Some(clipboard) = cx.read_from_clipboard() {
-                for entry in clipboard.entries() {
-                    if let gpui::ClipboardEntry::Image(img) = entry {
-                        self.attach_image_to_note(img, cx);
-                        pasted_image = true;
-                        break;
-                    }
-                }
-            }
-            if pasted_image {
+        if control && !shift {
+            if key.eq_ignore_ascii_case("c") {
+                self.copy_selection(cx);
+                return;
+            } else if key.eq_ignore_ascii_case("x") {
+                self.cut_selection(cx);
+                return;
+            } else if key.eq_ignore_ascii_case("v") {
+                self.paste_clipboard(cx);
                 return;
             }
         }
@@ -282,6 +294,8 @@ impl NotesApp {
                 true,
             ),
         };
+        let typing_family = self.typing_font_family;
+        let typing_size = self.typing_font_size_px;
 
         // Navigation
         if key.eq_ignore_ascii_case("left") {
@@ -399,57 +413,31 @@ impl NotesApp {
                 *cursor = text.chars().count();
                 cx.notify();
                 return;
-            } else if key.eq_ignore_ascii_case("c") {
+            }
+        }
+
+        // Enter key inserts newline in multiline fields
+        if key.eq_ignore_ascii_case("enter") {
+            if is_multiline {
+                let caret = *cursor;
+                let font_color = crate::text::styles::color_for_insert(
+                    &mut self.font_color_pinned,
+                    &mut self.font_color_pin_at,
+                    self.typing_font_color,
+                    &self.edit_body_font_color,
+                    caret,
+                );
+                let bg_color = crate::text::styles::color_for_insert(
+                    &mut self.bg_color_pinned,
+                    &mut self.bg_color_pin_at,
+                    self.typing_bg_color,
+                    &self.edit_body_bg_color,
+                    caret,
+                );
                 if let Some((start, end)) = get_selection_range(*cursor, *anchor) {
-                    let selected_chars: String =
-                        text.chars().skip(start).take(end - start).collect();
-                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(selected_chars));
-                }
-                return;
-            } else if key.eq_ignore_ascii_case("x") {
-                if let Some((start, end)) = get_selection_range(*cursor, *anchor) {
-                    let selected_chars: String =
-                        text.chars().skip(start).take(end - start).collect();
-                    cx.write_to_clipboard(gpui::ClipboardItem::new_string(selected_chars));
-                    replace_range(text, start, end, "");
+                    replace_range(text, start, end, "\n");
                     if is_multiline {
-                        crate::text::styles::drain_style_set([
-                            &mut self.edit_body_bold,
-                            &mut self.edit_body_italic,
-                            &mut self.edit_body_underline,
-                            &mut self.edit_body_strike,
-                        ], start, end);
-                    }
-                    *cursor = start;
-                    *anchor = None;
-                    if self.active_field == ActiveField::Body {
-                    self.touch_body_layout();
-                }
-                self.sync_active_text_block();
-                    self.collapse_empty_active_text_box();
-                    cx.notify();
-                }
-                return;
-            } else if key.eq_ignore_ascii_case("v") {
-                if let Some(clipboard_text) = cx.read_from_clipboard().and_then(|item| item.text())
-                {
-                    let cleaned_text = if is_multiline {
-                        clipboard_text
-                    } else {
-                        clipboard_text.replace("\n", " ")
-                    };
-                    let paste_len = cleaned_text.chars().count();
-                    if let Some((start, end)) = get_selection_range(*cursor, *anchor) {
-                        replace_range(text, start, end, &cleaned_text);
-                        if is_multiline {
-                        crate::text::styles::drain_style_set([
-                            &mut self.edit_body_bold,
-                            &mut self.edit_body_italic,
-                            &mut self.edit_body_underline,
-                            &mut self.edit_body_strike,
-                        ], start, end);
-                    }
-                        crate::text::styles::insert_style_set(
+                        crate::text::styles::drain_style_set(
                             [
                                 &mut self.edit_body_bold,
                                 &mut self.edit_body_italic,
@@ -457,55 +445,20 @@ impl NotesApp {
                                 &mut self.edit_body_strike,
                             ],
                             start,
-                            paste_len,
-                            [false; 4],
+                            end,
                         );
-                        *cursor = start + paste_len;
-                        *anchor = None;
-                    } else {
-                        let mut chars: Vec<char> = text.chars().collect();
-                        let insert_at = *cursor;
-                        for (idx, ch) in cleaned_text.chars().enumerate() {
-                            chars.insert(*cursor + idx, ch);
-                        }
-                        *text = chars.into_iter().collect();
-                        if is_multiline {
-                            crate::text::styles::insert_style_set(
-                                [
-                            &mut self.edit_body_bold,
-                            &mut self.edit_body_italic,
-                            &mut self.edit_body_underline,
-                            &mut self.edit_body_strike,
-                        ],
-                                insert_at,
-                                paste_len,
-                                [false; 4],
-                            );
-                        }
-                        *cursor += paste_len;
-                    }
-                    if self.active_field == ActiveField::Body {
-                    self.touch_body_layout();
-                }
-                self.sync_active_text_block();
-                    cx.notify();
-                }
-                return;
-            }
-        }
-
-        // Enter key inserts newline in multiline fields
-        if key.eq_ignore_ascii_case("enter") {
-            if is_multiline {
-                if let Some((start, end)) = get_selection_range(*cursor, *anchor) {
-                    replace_range(text, start, end, "\n");
-                    if is_multiline {
-                        crate::text::styles::drain_style_set([
-                            &mut self.edit_body_bold,
-                            &mut self.edit_body_italic,
-                            &mut self.edit_body_underline,
-                            &mut self.edit_body_strike,
-                        ], start, end);
+                        crate::text::styles::drain_font_values(
+                            &mut self.edit_body_font_family,
+                            &mut self.edit_body_font_size,
+                            start,
+                            end,
+                        );
+                        crate::text::styles::drain_color_values(
+                            &mut self.edit_body_font_color,
+                            &mut self.edit_body_bg_color,
+                            start,
+                            end,
+                        );
                     }
                     crate::text::styles::insert_style_set(
                         [
@@ -518,27 +471,85 @@ impl NotesApp {
                         1,
                         [false; 4],
                     );
+                    crate::text::styles::insert_font_values(
+                        &mut self.edit_body_font_family,
+                        &mut self.edit_body_font_size,
+                        start,
+                        1,
+                        typing_family,
+                        typing_size,
+                    );
+                    crate::text::styles::insert_color_values(
+                        &mut self.edit_body_font_color,
+                        &mut self.edit_body_bg_color,
+                        start,
+                        1,
+                        font_color,
+                        bg_color,
+                    );
                     *cursor = start + 1;
                     *anchor = None;
+                    crate::text::styles::advance_color_pin(
+                        self.font_color_pinned,
+                        &mut self.font_color_pin_at,
+                        *cursor,
+                    );
+                    crate::text::styles::advance_color_pin(
+                        self.bg_color_pinned,
+                        &mut self.bg_color_pin_at,
+                        *cursor,
+                    );
                 } else {
                     let mut chars: Vec<char> = text.chars().collect();
                     let insert_at = *cursor;
                     chars.insert(*cursor, '\n');
                     *text = chars.into_iter().collect();
                     if is_multiline {
-                        crate::text::styles::insert_style_set([
-                            &mut self.edit_body_bold,
-                            &mut self.edit_body_italic,
-                            &mut self.edit_body_underline,
-                            &mut self.edit_body_strike,
-                        ], insert_at, 1, [false; 4]);
+                        crate::text::styles::insert_style_set(
+                            [
+                                &mut self.edit_body_bold,
+                                &mut self.edit_body_italic,
+                                &mut self.edit_body_underline,
+                                &mut self.edit_body_strike,
+                            ],
+                            insert_at,
+                            1,
+                            [false; 4],
+                        );
+                        crate::text::styles::insert_font_values(
+                            &mut self.edit_body_font_family,
+                            &mut self.edit_body_font_size,
+                            insert_at,
+                            1,
+                            typing_family,
+                            typing_size,
+                        );
+                        crate::text::styles::insert_color_values(
+                            &mut self.edit_body_font_color,
+                            &mut self.edit_body_bg_color,
+                            insert_at,
+                            1,
+                            font_color,
+                            bg_color,
+                        );
                     }
                     *cursor += 1;
+                    crate::text::styles::advance_color_pin(
+                        self.font_color_pinned,
+                        &mut self.font_color_pin_at,
+                        *cursor,
+                    );
+                    crate::text::styles::advance_color_pin(
+                        self.bg_color_pinned,
+                        &mut self.bg_color_pin_at,
+                        *cursor,
+                    );
                 }
                 if self.active_field == ActiveField::Body {
                     self.touch_body_layout();
                 }
                 self.sync_active_text_block();
+                self.schedule_autosave(cx);
                 cx.notify();
             }
             return;
@@ -549,12 +560,28 @@ impl NotesApp {
             if let Some((start, end)) = get_selection_range(*cursor, *anchor) {
                 replace_range(text, start, end, "");
                 if is_multiline {
-                    crate::text::styles::drain_style_set([
+                    crate::text::styles::drain_style_set(
+                        [
                             &mut self.edit_body_bold,
                             &mut self.edit_body_italic,
                             &mut self.edit_body_underline,
                             &mut self.edit_body_strike,
-                        ], start, end);
+                        ],
+                        start,
+                        end,
+                    );
+                    crate::text::styles::drain_font_values(
+                        &mut self.edit_body_font_family,
+                        &mut self.edit_body_font_size,
+                        start,
+                        end,
+                    );
+                    crate::text::styles::drain_color_values(
+                        &mut self.edit_body_font_color,
+                        &mut self.edit_body_bg_color,
+                        start,
+                        end,
+                    );
                 }
                 *cursor = start;
                 *anchor = None;
@@ -562,20 +589,34 @@ impl NotesApp {
                 let mut chars: Vec<char> = text.chars().collect();
                 chars.remove(*cursor - 1);
                 if is_multiline {
-                    crate::text::styles::remove_style_set([
+                    crate::text::styles::remove_style_set(
+                        [
                             &mut self.edit_body_bold,
                             &mut self.edit_body_italic,
                             &mut self.edit_body_underline,
                             &mut self.edit_body_strike,
-                        ], *cursor - 1);
+                        ],
+                        *cursor - 1,
+                    );
+                    crate::text::styles::remove_font_value(
+                        &mut self.edit_body_font_family,
+                        &mut self.edit_body_font_size,
+                        *cursor - 1,
+                    );
+                    crate::text::styles::remove_color_value(
+                        &mut self.edit_body_font_color,
+                        &mut self.edit_body_bg_color,
+                        *cursor - 1,
+                    );
                 }
                 *text = chars.into_iter().collect();
                 *cursor -= 1;
             }
             if self.active_field == ActiveField::Body {
-                    self.touch_body_layout();
-                }
-                self.sync_active_text_block();
+                self.touch_body_layout();
+            }
+            self.sync_active_text_block();
+            self.schedule_autosave(cx);
             self.collapse_empty_active_text_box();
             cx.notify();
             return;
@@ -583,12 +624,28 @@ impl NotesApp {
             if let Some((start, end)) = get_selection_range(*cursor, *anchor) {
                 replace_range(text, start, end, "");
                 if is_multiline {
-                    crate::text::styles::drain_style_set([
+                    crate::text::styles::drain_style_set(
+                        [
                             &mut self.edit_body_bold,
                             &mut self.edit_body_italic,
                             &mut self.edit_body_underline,
                             &mut self.edit_body_strike,
-                        ], start, end);
+                        ],
+                        start,
+                        end,
+                    );
+                    crate::text::styles::drain_font_values(
+                        &mut self.edit_body_font_family,
+                        &mut self.edit_body_font_size,
+                        start,
+                        end,
+                    );
+                    crate::text::styles::drain_color_values(
+                        &mut self.edit_body_font_color,
+                        &mut self.edit_body_bg_color,
+                        start,
+                        end,
+                    );
                 }
                 *cursor = start;
                 *anchor = None;
@@ -598,20 +655,34 @@ impl NotesApp {
                     let mut chars: Vec<char> = text.chars().collect();
                     chars.remove(*cursor);
                     if is_multiline {
-                        crate::text::styles::remove_style_set([
-                            &mut self.edit_body_bold,
-                            &mut self.edit_body_italic,
-                            &mut self.edit_body_underline,
-                            &mut self.edit_body_strike,
-                        ], *cursor);
+                        crate::text::styles::remove_style_set(
+                            [
+                                &mut self.edit_body_bold,
+                                &mut self.edit_body_italic,
+                                &mut self.edit_body_underline,
+                                &mut self.edit_body_strike,
+                            ],
+                            *cursor,
+                        );
+                        crate::text::styles::remove_font_value(
+                            &mut self.edit_body_font_family,
+                            &mut self.edit_body_font_size,
+                            *cursor,
+                        );
+                        crate::text::styles::remove_color_value(
+                            &mut self.edit_body_font_color,
+                            &mut self.edit_body_bg_color,
+                            *cursor,
+                        );
                     }
                     *text = chars.into_iter().collect();
                 }
             }
             if self.active_field == ActiveField::Body {
-                    self.touch_body_layout();
-                }
-                self.sync_active_text_block();
+                self.touch_body_layout();
+            }
+            self.sync_active_text_block();
+            self.schedule_autosave(cx);
             self.collapse_empty_active_text_box();
             cx.notify();
             return;
@@ -626,6 +697,29 @@ impl NotesApp {
                     character.replace("\n", " ")
                 };
                 let char_len = cleaned_char.chars().count();
+                let caret = *cursor;
+                let font_color = if is_multiline {
+                    crate::text::styles::color_for_insert(
+                        &mut self.font_color_pinned,
+                        &mut self.font_color_pin_at,
+                        self.typing_font_color,
+                        &self.edit_body_font_color,
+                        caret,
+                    )
+                } else {
+                    0
+                };
+                let bg_color = if is_multiline {
+                    crate::text::styles::color_for_insert(
+                        &mut self.bg_color_pinned,
+                        &mut self.bg_color_pin_at,
+                        self.typing_bg_color,
+                        &self.edit_body_bg_color,
+                        caret,
+                    )
+                } else {
+                    0
+                };
                 let inherited = if is_multiline {
                     let prev = |flags: &[bool]| {
                         *cursor > 0 && *cursor - 1 < flags.len() && flags[*cursor - 1]
@@ -643,12 +737,28 @@ impl NotesApp {
                 if let Some((start, end)) = get_selection_range(*cursor, *anchor) {
                     replace_range(text, start, end, &cleaned_char);
                     if is_multiline {
-                        crate::text::styles::drain_style_set([
-                            &mut self.edit_body_bold,
-                            &mut self.edit_body_italic,
-                            &mut self.edit_body_underline,
-                            &mut self.edit_body_strike,
-                        ], start, end);
+                        crate::text::styles::drain_style_set(
+                            [
+                                &mut self.edit_body_bold,
+                                &mut self.edit_body_italic,
+                                &mut self.edit_body_underline,
+                                &mut self.edit_body_strike,
+                            ],
+                            start,
+                            end,
+                        );
+                        crate::text::styles::drain_font_values(
+                            &mut self.edit_body_font_family,
+                            &mut self.edit_body_font_size,
+                            start,
+                            end,
+                        );
+                        crate::text::styles::drain_color_values(
+                            &mut self.edit_body_font_color,
+                            &mut self.edit_body_bg_color,
+                            start,
+                            end,
+                        );
                     }
                     crate::text::styles::insert_style_set(
                         [
@@ -661,7 +771,37 @@ impl NotesApp {
                         char_len,
                         inherited,
                     );
+                    if is_multiline {
+                        crate::text::styles::insert_font_values(
+                            &mut self.edit_body_font_family,
+                            &mut self.edit_body_font_size,
+                            start,
+                            char_len,
+                            typing_family,
+                            typing_size,
+                        );
+                        crate::text::styles::insert_color_values(
+                            &mut self.edit_body_font_color,
+                            &mut self.edit_body_bg_color,
+                            start,
+                            char_len,
+                            font_color,
+                            bg_color,
+                        );
+                    }
                     *cursor = start + char_len;
+                    if is_multiline {
+                        crate::text::styles::advance_color_pin(
+                            self.font_color_pinned,
+                            &mut self.font_color_pin_at,
+                            *cursor,
+                        );
+                        crate::text::styles::advance_color_pin(
+                            self.bg_color_pinned,
+                            &mut self.bg_color_pin_at,
+                            *cursor,
+                        );
+                    }
                     *anchor = None;
                 } else {
                     let mut chars: Vec<char> = text.chars().collect();
@@ -673,22 +813,51 @@ impl NotesApp {
                     if is_multiline {
                         crate::text::styles::insert_style_set(
                             [
-                            &mut self.edit_body_bold,
-                            &mut self.edit_body_italic,
-                            &mut self.edit_body_underline,
-                            &mut self.edit_body_strike,
-                        ],
+                                &mut self.edit_body_bold,
+                                &mut self.edit_body_italic,
+                                &mut self.edit_body_underline,
+                                &mut self.edit_body_strike,
+                            ],
                             insert_at,
                             char_len,
                             inherited,
                         );
+                        crate::text::styles::insert_font_values(
+                            &mut self.edit_body_font_family,
+                            &mut self.edit_body_font_size,
+                            insert_at,
+                            char_len,
+                            typing_family,
+                            typing_size,
+                        );
+                        crate::text::styles::insert_color_values(
+                            &mut self.edit_body_font_color,
+                            &mut self.edit_body_bg_color,
+                            insert_at,
+                            char_len,
+                            font_color,
+                            bg_color,
+                        );
                     }
                     *cursor += char_len;
+                    if is_multiline {
+                        crate::text::styles::advance_color_pin(
+                            self.font_color_pinned,
+                            &mut self.font_color_pin_at,
+                            *cursor,
+                        );
+                        crate::text::styles::advance_color_pin(
+                            self.bg_color_pinned,
+                            &mut self.bg_color_pin_at,
+                            *cursor,
+                        );
+                    }
                 }
                 if self.active_field == ActiveField::Body {
                     self.touch_body_layout();
                 }
                 self.sync_active_text_block();
+                self.schedule_autosave(cx);
                 cx.notify();
             }
         }

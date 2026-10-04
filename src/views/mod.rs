@@ -1,9 +1,11 @@
 //! Top-level layout.
 //!
-//! - `sidebar` — notebook list
+//! - `title_bar` — window caption, search, and window controls
+//! - `ribbon` — Home and View menus
+//! - `sidebar` — notebook list and the unpinned note switcher
 //! - `detail_pane` — page list plus editor or viewer
-//! - `ribbon` — Home formatting commands
 
 pub(crate) mod detail_pane;
 pub(crate) mod ribbon;
 pub(crate) mod sidebar;
+pub(crate) mod title_bar;

@@ -23,6 +23,15 @@ chrono = { version = "0.4", features = ["serde"] }
 winresource = "0.1"
 
 
+# A debug launch spends most of its time inside unoptimized GPUI. Optimize dependencies
+# only, so `cargo run` opens faster without a full release build. The next run recompiles
+# those dependencies once.
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.dev.package.todo-app-gpui]
+opt-level = 0
+
 [profile.release]
 opt-level = 3          # Maximize speed optimizations
 lto = true             # Enable Link-Time Optimization across crates

@@ -1,328 +1,40 @@
 //! Reusable styled text field used by titles and other single-block editors.
 
-use gpui::{
-    div, prelude::*, px, rgb, rgba, AnyElement, ClipboardItem, Context, FocusHandle, Focusable, KeyDownEvent,
-};
-use std::ops::Range;
+use gpui::{div, prelude::*, px, rgb, rgba, AnyElement};
 
-use crate::constants::colors::{TEXT_HINT, TEXT_PRIMARY};
+use crate::constants::colors::{NOTE_HINT, NOTE_INK};
+use crate::constants::typography::CURSOR_WIDTH;
 
 #[derive(Clone)]
-#[allow(dead_code)]
 pub struct TextEditor {
     pub text: String,
     pub bold_flags: Vec<bool>,
     pub italic_flags: Vec<bool>,
     pub underline_flags: Vec<bool>,
     pub strike_flags: Vec<bool>,
-    pub cursor: usize,
-    pub anchor: Option<usize>,
-    pub focus_handle: FocusHandle,
-    pub is_selecting: bool,
+    pub font_families: Vec<u8>,
+    pub font_sizes: Vec<f32>,
+    pub font_colors: Vec<u32>,
+    pub bg_colors: Vec<u32>,
+    pub line_layouts: Vec<crate::models::LineLayout>,
+    pub zoom: f32,
     pub cursor_visible: bool,
     pub font_size: f32,
-    pub font_type: crate::constants::typography::FontType,
 }
 
-#[allow(dead_code)]
 impl TextEditor {
-    /// Computes the dynamic line height based on standardized font size.
+    /// Line box height. The extra leading scales with zoom so the caret stays on the glyph.
     #[inline]
     pub fn line_height(&self) -> f32 {
-        crate::constants::typography::line_height_for_font_size(self.font_size)
+        let zoom = self.zoom.max(0.05);
+        crate::constants::typography::line_height_for_font_size(self.font_size / zoom) * zoom
     }
 
-    /// Computes the dynamic cursor height based on standardized font size.
+    /// Caret height, scaled the same way as the line box.
     #[inline]
     pub fn cursor_height(&self) -> f32 {
-        crate::constants::typography::cursor_height_for_font_size(self.font_size)
-    }
-
-    /// Computes the dynamic selection height based on standardized font size.
-    #[inline]
-    pub fn selection_height(&self) -> f32 {
-        crate::constants::typography::selection_height_for_font_size(self.font_size)
-    }
-
-    /// Creates a new editor wrapper around a text value and binds it to a GPUI focus handle.
-    pub fn new(text: String, cx: &mut Context<impl Focusable>) -> Self {
-        let cursor = text.chars().count();
-        Self {
-            bold_flags: vec![false; cursor],
-            italic_flags: vec![false; cursor],
-            underline_flags: vec![false; cursor],
-            strike_flags: vec![false; cursor],
-            text,
-            cursor,
-            anchor: None,
-            focus_handle: cx.focus_handle(),
-            is_selecting: false,
-            cursor_visible: true,
-            font_size: crate::constants::typography::CANVAS_BODY_FONT_SIZE,
-            font_type: crate::constants::typography::FontType::from_family_name(
-                crate::constants::typography::DEFAULT_FONT_FAMILY,
-            ),
-        }
-    }
-
-    /// Returns the current selection as a character range when the anchor and cursor differ.
-    pub fn selection(&self) -> Option<Range<usize>> {
-        if let Some(anchor) = self.anchor {
-            if anchor != self.cursor {
-                let start = anchor.min(self.cursor);
-                let end = anchor.max(self.cursor);
-                return Some(start..end);
-            }
-        }
-        None
-    }
-
-    /// Extracts the currently selected text from the editor buffer if a selection exists.
-    pub fn selected_text(&self) -> Option<String> {
-        let range = self.selection()?;
-        let chars: Vec<char> = self.text.chars().collect();
-        if range.end <= chars.len() {
-            Some(chars[range.start..range.end].iter().collect())
-        } else {
-            None
-        }
-    }
-
-    /// Selects the entire text content from beginning to end of the current buffer.
-    pub fn select_all(&mut self) {
-        self.anchor = Some(0);
-        self.cursor = self.text.chars().count();
-    }
-
-    /// Clears the current selection anchor without moving the cursor.
-    pub fn clear_selection(&mut self) {
-        self.anchor = None;
-    }
-
-    /// Inserts a string at the active cursor position, replacing the current selection if one exists.
-    pub fn insert_str(&mut self, s: &str) {
-        let chars: Vec<char> = self.text.chars().collect();
-        let total_chars = chars.len();
-
-        let (start, end) = if let Some(range) = self.selection() {
-            (range.start, range.end)
-        } else {
-            let pos = self.cursor.min(total_chars);
-            (pos, pos)
-        };
-
-        let mut new_chars = Vec::with_capacity(total_chars - (end - start) + s.chars().count());
-        new_chars.extend_from_slice(&chars[..start]);
-        new_chars.extend(s.chars());
-        new_chars.extend_from_slice(&chars[end..]);
-
-        self.text = new_chars.into_iter().collect();
-        self.cursor = start + s.chars().count();
-        self.anchor = None;
-    }
-
-    /// Removes the selected content or the character immediately before the cursor.
-    pub fn backspace(&mut self) {
-        let chars: Vec<char> = self.text.chars().collect();
-        let total_chars = chars.len();
-
-        if let Some(range) = self.selection() {
-            let mut new_chars = Vec::with_capacity(total_chars - (range.end - range.start));
-            new_chars.extend_from_slice(&chars[..range.start]);
-            new_chars.extend_from_slice(&chars[range.end..]);
-            self.text = new_chars.into_iter().collect();
-            self.cursor = range.start;
-            self.anchor = None;
-        } else if self.cursor > 0 && self.cursor <= total_chars {
-            let mut new_chars = Vec::with_capacity(total_chars - 1);
-            new_chars.extend_from_slice(&chars[..self.cursor - 1]);
-            new_chars.extend_from_slice(&chars[self.cursor..]);
-            self.text = new_chars.into_iter().collect();
-            self.cursor -= 1;
-            self.anchor = None;
-        }
-    }
-
-    /// Deletes the selected content or the character directly after the cursor.
-    pub fn delete_forward(&mut self) {
-        let chars: Vec<char> = self.text.chars().collect();
-        let total_chars = chars.len();
-
-        if let Some(range) = self.selection() {
-            let mut new_chars = Vec::with_capacity(total_chars - (range.end - range.start));
-            new_chars.extend_from_slice(&chars[..range.start]);
-            new_chars.extend_from_slice(&chars[range.end..]);
-            self.text = new_chars.into_iter().collect();
-            self.cursor = range.start;
-            self.anchor = None;
-        } else if self.cursor < total_chars {
-            let mut new_chars = Vec::with_capacity(total_chars - 1);
-            new_chars.extend_from_slice(&chars[..self.cursor]);
-            new_chars.extend_from_slice(&chars[self.cursor + 1..]);
-            self.text = new_chars.into_iter().collect();
-            self.anchor = None;
-        }
-    }
-
-    /// Moves the cursor one character to the left and optionally extends the active selection.
-    pub fn move_left(&mut self, extend_selection: bool) {
-        if extend_selection {
-            if self.anchor.is_none() {
-                self.anchor = Some(self.cursor);
-            }
-            if self.cursor > 0 {
-                self.cursor -= 1;
-            }
-        } else {
-            if let Some(range) = self.selection() {
-                self.cursor = range.start;
-            } else if self.cursor > 0 {
-                self.cursor -= 1;
-            }
-            self.anchor = None;
-        }
-    }
-
-    /// Moves the cursor one character to the right and optionally extends the active selection.
-    pub fn move_right(&mut self, extend_selection: bool) {
-        let total_chars = self.text.chars().count();
-        if extend_selection {
-            if self.anchor.is_none() {
-                self.anchor = Some(self.cursor);
-            }
-            if self.cursor < total_chars {
-                self.cursor += 1;
-            }
-        } else {
-            if let Some(range) = self.selection() {
-                self.cursor = range.end;
-            } else if self.cursor < total_chars {
-                self.cursor += 1;
-            }
-            self.anchor = None;
-        }
-    }
-
-    /// Moves the cursor to the previous visual line while preserving or extending the selection.
-    pub fn move_up(&mut self, extend_selection: bool) {
-        let next_pos = crate::text::selection::move_cursor_up(&self.text, self.cursor);
-        if extend_selection {
-            if self.anchor.is_none() {
-                self.anchor = Some(self.cursor);
-            }
-        } else {
-            self.anchor = None;
-        }
-        self.cursor = next_pos;
-    }
-
-    /// Moves the cursor to the next visual line while preserving or extending the selection.
-    pub fn move_down(&mut self, extend_selection: bool) {
-        let next_pos = crate::text::selection::move_cursor_down(&self.text, self.cursor);
-        if extend_selection {
-            if self.anchor.is_none() {
-                self.anchor = Some(self.cursor);
-            }
-        } else {
-            self.anchor = None;
-        }
-        self.cursor = next_pos;
-    }
-
-    /// Handles a key event, including clipboard shortcuts, cursor movement, and text insertion.
-    pub fn handle_key<T: Focusable>(
-        &mut self,
-        event: &KeyDownEvent,
-        cx: &mut Context<T>,
-    ) -> bool {
-        self.cursor_visible = true;
-        let key = event.keystroke.key.as_str();
-        let control = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
-        let shift = event.keystroke.modifiers.shift;
-
-        if control {
-            if key.eq_ignore_ascii_case("a") {
-                self.select_all();
-                cx.notify();
-                return true;
-            } else if key.eq_ignore_ascii_case("c") {
-                if let Some(selected) = self.selected_text() {
-                    cx.write_to_clipboard(ClipboardItem::new_string(selected));
-                }
-                return true;
-            } else if key.eq_ignore_ascii_case("x") {
-                if let Some(selected) = self.selected_text() {
-                    cx.write_to_clipboard(ClipboardItem::new_string(selected));
-                    self.backspace();
-                    cx.notify();
-                }
-                return true;
-            } else if key.eq_ignore_ascii_case("v") {
-                if let Some(item) = cx.read_from_clipboard() {
-                    if let Some(text) = item.text() {
-                        self.insert_str(&text);
-                        cx.notify();
-                    }
-                }
-                return true;
-            }
-        }
-
-        match key {
-            "left" => {
-                self.move_left(shift);
-                cx.notify();
-                true
-            }
-            "right" => {
-                self.move_right(shift);
-                cx.notify();
-                true
-            }
-            "up" => {
-                self.move_up(shift);
-                cx.notify();
-                true
-            }
-            "down" => {
-                self.move_down(shift);
-                cx.notify();
-                true
-            }
-            "backspace" => {
-                self.backspace();
-                cx.notify();
-                true
-            }
-            "delete" => {
-                self.delete_forward();
-                cx.notify();
-                true
-            }
-            "enter" => {
-                self.insert_str("\n");
-                cx.notify();
-                true
-            }
-            _ => {
-                if let Some(ref ch) = event.keystroke.key_char {
-                    self.insert_str(ch.as_str());
-                    cx.notify();
-                    true
-                } else if key.chars().count() == 1 && !control {
-                    self.insert_str(key);
-                    cx.notify();
-                    true
-                } else {
-                    false
-                }
-            }
-        }
-    }
-
-    /// Renders the editor in a compact line-oriented form for a focused or unfocused state.
-    pub fn render_editor(&self, is_focused: bool) -> AnyElement {
-        self.render_editor_with_line_wrapper(is_focused, |_, _, _, row| row.into_any_element())
+        let zoom = self.zoom.max(0.05);
+        crate::constants::typography::cursor_height_for_font_size(self.font_size / zoom) * zoom
     }
 
     /// Renders the full text editor while allowing a caller to wrap each visual line.
@@ -344,24 +56,30 @@ impl TextEditor {
                 .relative()
                 .flex()
                 .items_center()
-                .min_h(px(line_height))
+                .h(px(line_height))
+                .line_height(px(line_height))
                 .text_size(px(font_size))
                 .child(if is_focused {
                     div()
                         .absolute()
                         .left(px(0.0))
-                        .top(px(2.0))
-                        .w(px(2.0))
+                        .top(px(((line_height - cursor_height) * 0.5).max(0.0)))
+                        .w(px(CURSOR_WIDTH))
                         .h(px(cursor_height))
                         .bg(if self.cursor_visible {
-                            rgb(0x0078d4)
+                            rgb(NOTE_INK)
                         } else {
                             rgba(0x00000000)
                         })
                 } else {
                     div()
                 })
-                .child(div().text_color(rgb(TEXT_HINT)).text_size(px(font_size)).child("Type note..."));
+                .child(
+                    div()
+                        .text_color(rgb(NOTE_HINT))
+                        .text_size(px(font_size))
+                        .child("Type note..."),
+                );
             return line_wrapper(0, 0, "", row).into_any_element();
         }
 
@@ -392,35 +110,64 @@ impl TextEditor {
                 .flex_shrink_0()
                 .items_center()
                 .text_size(px(font_size))
+                .line_height(px(line_height))
                 .whitespace_nowrap()
-                .min_h(px(line_height));
+                .h(px(line_height));
+            row = style_line_row(
+                row,
+                self.line_layouts.get(line_idx).copied().unwrap_or_default(),
+                self.zoom,
+            );
 
-            let line_italic = crate::text::styles::slice_flags(&self.italic_flags, line_start, line_end, line_len);
-            let line_underline =
-                crate::text::styles::slice_flags(&self.underline_flags, line_start, line_end, line_len);
-            let line_strike = crate::text::styles::slice_flags(&self.strike_flags, line_start, line_end, line_len);
+            let line_italic = crate::text::styles::slice_flags(
+                &self.italic_flags,
+                line_start,
+                line_end,
+                line_len,
+            );
+            let line_underline = crate::text::styles::slice_flags(
+                &self.underline_flags,
+                line_start,
+                line_end,
+                line_len,
+            );
+            let line_strike = crate::text::styles::slice_flags(
+                &self.strike_flags,
+                line_start,
+                line_end,
+                line_len,
+            );
+            let line_families = slice_u8(&self.font_families, line_start, line_end, line_len);
+            let line_sizes = slice_f32(&self.font_sizes, line_start, line_end, line_len);
+            let line_colors = slice_u32(&self.font_colors, line_start, line_end, line_len);
+            let line_bgs = slice_u32(&self.bg_colors, line_start, line_end, line_len);
 
-            // Render line text as styled runs (bold, italic, underline, strikethrough)
+            // Render line text as styled runs (bold, italic, underline, strikethrough, font, size)
             let runs = crate::text::styles::split_text_into_full_runs(
                 line,
                 &line_bold_flags,
                 &line_italic,
                 &line_underline,
                 &line_strike,
+                &line_families,
+                &line_sizes,
+                &line_colors,
+                &line_bgs,
             );
             let mut line_elements = Vec::new();
             if runs.is_empty() {
                 line_elements.push(
                     div()
-                        .text_color(rgb(TEXT_PRIMARY))
+                        .text_color(rgb(NOTE_INK))
                         .text_size(px(font_size))
+                        .line_height(px(line_height))
                         .child("\u{00A0}")
                         .into_any_element(),
                 );
             } else {
                 for run in &runs {
-                    let color = if run.is_bold { 0xffffff } else { TEXT_PRIMARY };
-                    line_elements.push(styled_run_element(run, font_size, color, true));
+                    let color = NOTE_INK;
+                    line_elements.push(styled_run_element(run, color, true, self.zoom));
                 }
             }
 
@@ -438,6 +185,7 @@ impl TextEditor {
         }
 
         div()
+            .w_full()
             .flex()
             .flex_col()
             .children(line_rows)
@@ -445,32 +193,99 @@ impl TextEditor {
     }
 }
 
+pub(crate) fn style_line_row(
+    row: gpui::Div,
+    layout: crate::models::LineLayout,
+    zoom: f32,
+) -> gpui::Div {
+    let indent = layout.indent as f32 * crate::constants::typography::INDENT_STEP * zoom;
+    let row = row.w_full().pl(px(indent));
+    match layout.align {
+        1 => row.justify_center(),
+        2 => row.justify_end(),
+        _ => row.justify_start(),
+    }
+}
+
+fn slice_u8(values: &[u8], start: usize, end: usize, len: usize) -> Vec<u8> {
+    let mut sliced = if start < values.len() {
+        values[start..end.min(values.len())].to_vec()
+    } else {
+        Vec::new()
+    };
+    sliced.resize(len, 0);
+    sliced
+}
+
+fn slice_u32(values: &[u32], start: usize, end: usize, len: usize) -> Vec<u32> {
+    let mut sliced = if start < values.len() {
+        values[start..end.min(values.len())].to_vec()
+    } else {
+        Vec::new()
+    };
+    sliced.resize(len, 0);
+    sliced
+}
+
+fn slice_f32(values: &[f32], start: usize, end: usize, len: usize) -> Vec<f32> {
+    let mut sliced = if start < values.len() {
+        values[start..end.min(values.len())].to_vec()
+    } else {
+        Vec::new()
+    };
+    sliced.resize(len, crate::constants::typography::CANVAS_BODY_FONT_SIZE);
+    sliced
+}
+
 /// Paints one styled text run. Decorations are skipped for invisible width-matching ghosts.
 pub(crate) fn styled_run_element(
     run: &crate::text::styles::StyledRun,
-    font_size: f32,
     color: u32,
     decorations: bool,
+    zoom: f32,
 ) -> AnyElement {
+    let zoom = if zoom <= 0.05 { 1.0 } else { zoom };
+    let base_size = if run.font_size > 0.0 {
+        run.font_size
+    } else {
+        crate::constants::typography::CANVAS_BODY_FONT_SIZE
+    };
+    let font_size = base_size * zoom;
+    let line_height = crate::constants::typography::line_height_for_font_size(base_size) * zoom;
+    let mut text_color = if run.font_color != 0 {
+        run.font_color
+    } else {
+        color
+    };
+    if run.bg_color != 0 && run.font_color == 0 && text_color != 0 {
+        text_color = 0x1e1e1e;
+    }
     let mut el = div()
         .relative()
-        .text_color(if color == 0 {
+        .text_color(if text_color == 0 {
             rgba(0x00000000)
         } else {
-            rgb(color)
+            rgb(text_color)
         })
         .text_size(px(font_size))
+        .line_height(px(line_height))
+        .font_family(crate::constants::typography::font_style_name(
+            run.font_family,
+        ))
         .font_weight(if run.is_bold {
             gpui::FontWeight::BOLD
         } else {
             gpui::FontWeight::NORMAL
         });
+    if run.bg_color != 0 {
+        el = el.bg(rgb(run.bg_color));
+    }
     if run.is_italic {
         el = el.italic();
     }
     el = el.child(run.text.replace(' ', "\u{00A0}"));
     if decorations && run.is_underline {
-        el = el.border_b_1().border_color(rgb(color));
+        el = el.border_b_1().border_color(rgb(text_color));
     }
     if decorations && run.is_strike {
         el = el.child(
@@ -480,7 +295,7 @@ pub(crate) fn styled_run_element(
                 .left(px(0.0))
                 .right(px(0.0))
                 .h(px(1.0))
-                .bg(rgb(color)),
+                .bg(rgb(text_color)),
         );
     }
     el.into_any_element()

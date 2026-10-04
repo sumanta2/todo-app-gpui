@@ -1,7 +1,7 @@
 //! Canvas surfaces for the open page.
 //!
 //! - `editor` — editable canvas shell (pan, drag, pointer routing)
-//! - `header` — section tabs and inline heading editors
+//! - `header` — section tabs, section name, page title, and page heading
 //! - `blocks` — text, image, and mixed blocks
 //! - `text_segment` — one editable text segment
 //! - `viewer` — read-only page canvas

@@ -112,6 +112,8 @@ impl NotesApp {
             typing_font_size_px: crate::constants::typography::CANVAS_BODY_FONT_SIZE,
             font_color_menu_open: false,
             bg_color_menu_open: false,
+            ribbon_pinned: false,
+            ribbon_pane: super::RibbonPane::Home,
             typing_font_color: 0,
             typing_bg_color: 0,
             font_color_pinned: false,

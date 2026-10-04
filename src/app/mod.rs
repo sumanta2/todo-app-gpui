@@ -63,6 +63,13 @@ pub(crate) enum InlineGestureKind {
     },
 }
 
+/// Which ribbon menu fills the shared pin slot under the ribbon.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RibbonPane {
+    Home,
+    View,
+}
+
 /// Root application state for the notes workspace.
 ///
 /// This struct keeps all note data, the active editing state, and the canvas-level
@@ -234,6 +241,10 @@ pub struct NotesApp {
     pub(crate) font_color_menu_open: bool,
     /// Whether the highlight-color list is open.
     pub(crate) bg_color_menu_open: bool,
+    /// One shared pin. The menu in `ribbon_pane` stays fixed under the ribbon.
+    pub(crate) ribbon_pinned: bool,
+    /// Which ribbon menu occupies the shared pin slot.
+    pub(crate) ribbon_pane: RibbonPane,
     /// Text color applied to characters typed after a ribbon color choice. `0` is the default.
     pub(crate) typing_font_color: u32,
     /// Highlight applied to characters typed after a ribbon color choice. `0` is none.

@@ -19,14 +19,43 @@ use super::controls::{
     clip_button, color_button, color_list, font_size_list, font_style_list, format_button,
     layout_button, ribbon_dropdown, ClipAction, LayoutAction,
 };
-use super::dropdown::{dropdown_popup, DROPDOWN_PAD};
+use super::dropdown::{dropdown_popup, menu_pin_button, DropdownFlow, DROPDOWN_PAD};
+use crate::app::RibbonPane;
 
 impl NotesApp {
     
     pub(crate) fn render_home_menu_layers(&mut self, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        if !self.home_menu_open {
+        if self.ribbon_pinned || !self.home_menu_open {
             return Vec::new();
         }
+        vec![
+            div()
+                .absolute()
+                .top(px(36.0))
+                .left(px(0.0))
+                .right(px(0.0))
+                .bottom(px(0.0))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, _, _, cx| {
+                        this.home_menu_open = false;
+                        this.font_style_menu_open = false;
+                        this.font_size_menu_open = false;
+                        this.font_color_menu_open = false;
+                        this.bg_color_menu_open = false;
+                        cx.notify();
+                    }),
+                )
+                .into_any_element(),
+            div()
+                .absolute()
+                .top(px(40.0))
+                .child(self.home_menu_bar(cx))
+                .into_any_element(),
+        ]
+    }
+
+    pub(super) fn home_menu_bar(&mut self, cx: &mut Context<Self>) -> AnyElement {
 
         let editing = self.is_editing;
         let bold_on = self.text_style_is_on(TextStyleKind::Bold);
@@ -34,10 +63,12 @@ impl NotesApp {
         let underline_on = self.text_style_is_on(TextStyleKind::Underline);
         let strike_on = self.text_style_is_on(TextStyleKind::Strike);
 
+        let docked = self.ribbon_pinned;
         let mut menu = div()
-            .absolute()
-            .top(px(40.0))
+            .relative()
+            .pr(px(32.0))
             .bg(rgb(NOTE_PAGE))
+            .left(px(0.0)) 
             .border_1()
             .border_color(rgb(ONENOTE_BAR_LINE))
             .flex()
@@ -71,37 +102,29 @@ impl NotesApp {
         let can_cut = editing && can_copy;
         let can_paste = editing;
 
-        // Font style popup
-        let font_popup = font_open.then(|| {
-            dropdown_popup(132.0, 0.0, font_style_list(self.typing_font_family, cx))
-        });
-
-        // Font size popup
-        let size_popup = size_open.then(|| {
-            dropdown_popup(
-                56.0,
-                0.0,
-                font_size_list(self.typing_font_size_px, cx),
-            )
-        });
-
-        // Font color popup
+        let font_body = font_style_list(self.typing_font_family, DropdownFlow::Column, cx);
+        let font_popup = font_open.then(|| dropdown_popup(132.0, 0.0, font_body));
+        let size_body = font_size_list(self.typing_font_size_px, DropdownFlow::Column, cx);
+        let size_popup = size_open.then(|| dropdown_popup(56.0, 0.0, size_body));
+        let font_color_body = color_list(
+            FONT_COLOR_OPTIONS,
+            shown_font_color,
+            true,
+            DropdownFlow::Wrap,
+            cx,
+        );
         let font_color_popup = font_color_open.then(|| {
-            dropdown_popup(
-                RIBBON_DROPDOWN_W,
-                DROPDOWN_PAD * 0.5,
-                color_list(FONT_COLOR_OPTIONS, shown_font_color, true, cx),
-            )
+            dropdown_popup(RIBBON_DROPDOWN_W, DROPDOWN_PAD * 0.5, font_color_body)
         });
-
-        // Background color popup
-        let bg_color_popup = bg_color_open.then(|| {
-            dropdown_popup(
-                RIBBON_DROPDOWN_W,
-                DROPDOWN_PAD * 0.5,
-                color_list(BG_COLOR_OPTIONS, shown_bg_color, false, cx),
-            )
-        });
+        let bg_color_body = color_list(
+            BG_COLOR_OPTIONS,
+            shown_bg_color,
+            false,
+            DropdownFlow::Wrap,
+            cx,
+        );
+        let bg_color_popup =
+            bg_color_open.then(|| dropdown_popup(RIBBON_DROPDOWN_W, DROPDOWN_PAD * 0.5, bg_color_body));
 
         // Clipboard buttons
         menu = menu.child(
@@ -338,26 +361,7 @@ impl NotesApp {
                     LayoutAction::AlignRight,
                 )),
         );
-        vec![
-            div()
-                .absolute()
-                .top(px(36.0))
-                .left(px(0.0))
-                .right(px(0.0))
-                .bottom(px(0.0))
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(|this, _, _, cx| {
-                        this.home_menu_open = false;
-                        this.font_style_menu_open = false;
-                        this.font_size_menu_open = false;
-                        this.font_color_menu_open = false;
-                        this.bg_color_menu_open = false;
-                        cx.notify();
-                    }),
-                )
-                .into_any_element(),
-            menu.into_any_element(),
-        ]
+        menu.child(menu_pin_button(RibbonPane::Home, docked, cx))
+            .into_any_element()
     }
 }

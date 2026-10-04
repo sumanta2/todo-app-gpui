@@ -4,6 +4,7 @@ use gpui::{
     div, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButton, Render, Window,
 };
 
+use super::dropdown::{dropdown_items, DropdownFlow};
 use crate::app::formatting::TextStyleKind;
 use crate::app::NotesApp;
 use crate::constants::{
@@ -97,8 +98,12 @@ pub(super) fn ribbon_dropdown(
         .into_any_element()
 }
 
-pub(super) fn font_style_list(selected: u8, cx: &mut Context<NotesApp>) -> AnyElement {
-    let mut list = div().flex().flex_col().gap(px(RIBBON_GAP)).pt(px(2.0));
+pub(super) fn font_style_list(
+    selected: u8,
+    flow: DropdownFlow,
+    cx: &mut Context<NotesApp>,
+) -> AnyElement {
+    let mut list = dropdown_items(flow, RIBBON_GAP).pt(px(2.0));
     for (index, name) in FONT_STYLE_OPTIONS.iter().enumerate() {
         let index = index as u8;
         list = list.child(menu_choice(
@@ -116,8 +121,12 @@ pub(super) fn font_style_list(selected: u8, cx: &mut Context<NotesApp>) -> AnyEl
     list.into_any_element()
 }
 
-pub(super) fn font_size_list(selected_px: f32, cx: &mut Context<NotesApp>) -> AnyElement {
-    let mut list = div().flex().flex_col().gap(px(RIBBON_GAP)).pt(px(2.0));
+pub(super) fn font_size_list(
+    selected_px: f32,
+    flow: DropdownFlow,
+    cx: &mut Context<NotesApp>,
+) -> AnyElement {
+    let mut list = dropdown_items(flow, RIBBON_GAP).pt(px(2.0));
     for (_, size_px) in FONT_SIZE_OPTIONS {
         let size_px = *size_px;
         let chosen = (size_px - selected_px).abs() < 0.05;
@@ -144,6 +153,7 @@ fn menu_choice(
         + 'static,
 ) -> AnyElement {
     div()
+        .w_full()
         .py(px(RIBBON_PAD_V))
         .flex()
         .items_center()
@@ -406,38 +416,30 @@ pub(super) fn color_list(
     options: &'static [u32],
     selected: u32,
     font: bool,
+    samples: DropdownFlow,
     cx: &mut Context<NotesApp>,
 ) -> AnyElement {
     let default_chosen = selected == 0;
-    color_palette(options, selected, font, default_chosen, cx)
+    color_palette(options, selected, font, samples, default_chosen, cx)
 }
 
-/// Color menu: a Default button, then color samples with three on each line.
-/// Spacing is half of the shared ribbon padding and gap.
+/// Color menu: a Default button on its own row, then samples laid out by `samples_flow`.
 fn color_palette(
     options: &'static [u32],
     selected: u32,
     font: bool,
+    samples_flow: DropdownFlow,
     default_chosen: bool,
     cx: &mut Context<NotesApp>,
 ) -> AnyElement {
     let gap = RIBBON_GAP * 0.5;
-    let inset = 2.0;
-    let mut samples = div().flex().flex_col().gap(px(gap));
-    for row in options.chunks(3) {
-        let mut line = div().flex().flex_row().gap(px(gap));
-        for &color in row {
-            line = line.child(color_swatch(color, color == selected, font, cx));
-        }
-        samples = samples.child(line);
+    let mut samples = dropdown_items(samples_flow, gap);
+    for &color in options {
+        samples = samples.child(color_swatch(color, color == selected, font, cx));
     }
 
-    div()
-        .w_full()
-        .flex()
-        .flex_col()
-        .gap(px(gap))
-        .pt(px(inset))
+    dropdown_items(DropdownFlow::Column, gap)
+        .pt(px(2.0))
         .child(default_color_choice(
             font,
             default_chosen,

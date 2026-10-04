@@ -33,6 +33,11 @@ impl Render for NotesApp {
         } else {
             None
         };
+        let docked_dropdowns = if show_ribbon {
+            self.render_docked_dropdowns(cx)
+        } else {
+            None
+        };
         let home_menus = if show_ribbon {
             self.render_home_menu_layers(cx)
         } else {
@@ -95,6 +100,7 @@ impl Render for NotesApp {
                         }),
                     )
                     .children(ribbon)
+                    .children(docked_dropdowns)
                     .child(
                         div()
                             .flex()

@@ -9,27 +9,48 @@ use crate::constants::{
 };
 
 use super::controls::FormatTooltip;
-use super::dropdown::{dropdown_popup, DROPDOWN_PAD};
+use super::dropdown::{dropdown_items, dropdown_popup, menu_pin_button, DropdownFlow, DROPDOWN_PAD};
+use crate::app::RibbonPane;
 
 impl NotesApp {
     pub(crate) fn render_view_menu_layers(&mut self, cx: &mut Context<Self>) -> Vec<AnyElement> {
-        if !self.view_menu_open {
+        if self.ribbon_pinned || !self.view_menu_open {
             return Vec::new();
         }
+        vec![
+            div()
+                .absolute()
+                .top(px(36.0))
+                .left(px(0.0))
+                .right(px(0.0))
+                .bottom(px(0.0))
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, _, _, cx| {
+                        this.view_menu_open = false;
+                        this.zoom_menu_open = false;
+                        cx.notify();
+                    }),
+                )
+                .into_any_element(),
+            div()
+                .absolute()
+                .top(px(40.0))
+                .child(self.view_menu_bar(cx))
+                .into_any_element(),
+        ]
+    }
+
+    pub(super) fn view_menu_bar(&mut self, cx: &mut Context<Self>) -> AnyElement {
         let full = self.full_page_view;
         let zoom_open = self.zoom_menu_open;
+        let docked = self.ribbon_pinned;
         let zoom_label = self.zoom_percent_label();
-        // Zoom popup
-        let zoom_popup = zoom_open.then(|| {
-            dropdown_popup(
-                ZOOM_DROPDOWN_W,
-                DROPDOWN_PAD,
-                zoom_option_list(self.canvas_zoom, cx),
-            )
-        });
+        let zoom_body = zoom_option_list(self.canvas_zoom, DropdownFlow::Column, cx);
+        let zoom_popup = zoom_open.then(|| dropdown_popup(ZOOM_DROPDOWN_W, DROPDOWN_PAD, zoom_body));
         let menu = div()
-            .absolute()
-            .top(px(40.0))
+            .relative()
+            .pr(px(32.0))
             .bg(rgb(NOTE_PAGE))
             .border_1()
             .border_color(rgb(ONENOTE_BAR_LINE))
@@ -77,31 +98,15 @@ impl NotesApp {
                     .child(zoom_step_button("zoom-out", "−", "Zoom out.", false, cx, false))
                     .child(zoom_picker(zoom_label, zoom_open, zoom_popup, cx)),
             );
-        vec![
-            div()
-                .absolute()
-                .top(px(36.0))
-                .left(px(0.0))
-                .right(px(0.0))
-                .bottom(px(0.0))
-                .on_mouse_down(
-                    MouseButton::Left,
-                    cx.listener(|this, _, _, cx| {
-                        this.view_menu_open = false;
-                        this.zoom_menu_open = false;
-                        cx.notify();
-                    }),
-                )
-                .into_any_element(),
-            menu.into_any_element(),
-        ]
+        menu.child(menu_pin_button(RibbonPane::View, docked, cx))
+            .into_any_element()
     }
 }
 
 const VIEW_TEXT: f32 = 16.0;
 const VIEW_INK: u32 = 0x4a3f2c;
 /// Zoom dropdown trigger. One third narrower than the 132px font dropdown.
-const ZOOM_DROPDOWN_W: f32 = 70.0;
+pub(super) const ZOOM_DROPDOWN_W: f32 = 70.0;
 
 fn zoom_step_button(
     id: &'static str,
@@ -218,8 +223,12 @@ fn zoom_picker(
         .into_any_element()
 }
 
-fn zoom_option_list(current: f32, cx: &mut Context<NotesApp>) -> AnyElement {
-    let mut list = div().flex().flex_row().flex_wrap().gap(px(RIBBON_GAP));
+pub(super) fn zoom_option_list(
+    current: f32,
+    flow: DropdownFlow,
+    cx: &mut Context<NotesApp>,
+) -> AnyElement {
+    let mut list = dropdown_items(flow, RIBBON_GAP);
     for zoom in crate::app::zoom::ZOOM_OPTIONS {
         let zoom = *zoom;
         let chosen = (current - zoom).abs() < 0.02;
@@ -227,7 +236,7 @@ fn zoom_option_list(current: f32, cx: &mut Context<NotesApp>) -> AnyElement {
         list = list.child(
             div()
                 .id(("zoom-option", (zoom * 100.0) as usize))
-                .py(px(RIBBON_PAD_V))
+                // .py(px(RIBBON_PAD_V))
                 .flex()
                 .items_center()
                 .cursor_pointer()

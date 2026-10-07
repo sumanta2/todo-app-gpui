@@ -176,6 +176,8 @@ pub(super) enum ClipAction {
     Copy,
     Paste,
     Delete,
+    Undo,
+    Redo,
 }
 
 #[derive(Clone, Copy)]
@@ -314,6 +316,8 @@ pub(super) fn clip_button(
                         ClipAction::Copy => this.copy_selection(cx),
                         ClipAction::Paste => this.paste_clipboard(cx),
                         ClipAction::Delete => this.delete_forward(cx),
+                        ClipAction::Undo => this.undo(cx),
+                        ClipAction::Redo => this.redo(cx),
                     }
                     cx.stop_propagation();
                 }),

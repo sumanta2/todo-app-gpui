@@ -1,6 +1,6 @@
 //! Window caption: app name, note search, and minimize, maximize, and close.
 
-use gpui::{div, prelude::*, px, rgb, Context, Window, WindowControlArea};
+use gpui::{div, prelude::*, px, rgb, Context, MouseButton, Window, WindowControlArea};
 
 use crate::app::NotesApp;
 
@@ -13,6 +13,8 @@ impl NotesApp {
         let maximized = window.is_maximized();
         let query = self.title_search.clone();
         let search_focused = self.title_search_focused;
+        let can_undo = self.can_undo();
+        let can_redo = self.can_redo();
         div()
             .id("app-title-bar")
             .w_full()
@@ -22,6 +24,20 @@ impl NotesApp {
             .flex_row()
             .items_center()
             .bg(rgb(crate::constants::colors::ONENOTE_BAR))
+            .child(history_caption_button(
+                "title-undo",
+                "\u{E7A7}",
+                can_undo,
+                cx,
+                true,
+            ))
+            .child(history_caption_button(
+                "title-redo",
+                "\u{E7A6}",
+                can_redo,
+                cx,
+                false,
+            ))
             .child(
                 div()
                     .flex_1()
@@ -100,6 +116,50 @@ impl NotesApp {
             ))
             .into_any_element()
     }
+}
+
+fn history_caption_button(
+    id: &'static str,
+    glyph: &'static str,
+    enabled: bool,
+    cx: &mut Context<NotesApp>,
+    undo: bool,
+) -> gpui::AnyElement {
+    let ink = if enabled {
+        crate::constants::colors::ONENOTE_INK
+    } else {
+        crate::constants::colors::ONENOTE_INK_MUTED
+    };
+    let mut button = div()
+        .id(id)
+        .ml(px(if undo { 8.0 } else { 0.0 }))
+        .w(px(28.0))
+        .h(px(28.0))
+        .flex()
+        .items_center()
+        .justify_center()
+        .rounded(px(4.0))
+        .child(
+            div()
+                .font_family("Segoe MDL2 Assets")
+                .text_size(px(14.0))
+                .text_color(rgb(ink))
+                .child(glyph),
+        );
+    if enabled {
+        button = button
+            .cursor_pointer()
+            .hover(|style| style.bg(rgb(crate::constants::colors::ONENOTE_BAR_HOVER)))
+            .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _, cx| {
+                if undo {
+                    this.undo(cx);
+                } else {
+                    this.redo(cx);
+                }
+                cx.stop_propagation();
+            }));
+    }
+    button.into_any_element()
 }
 
 fn caption_button(

@@ -31,9 +31,13 @@ impl NotesApp {
 
     /// Deletes the selected image, the selected text, or the character after the caret.
     pub(crate) fn delete_forward(&mut self, cx: &mut Context<Self>) {
+        if self.is_editing {
+            self.record_edit(crate::app::history::EditKind::Clipboard);
+        }
         if self.delete_selected_image() {
             self.schedule_autosave(cx);
             cx.notify();
+            self.discard_unchanged_edit();
             return;
         }
         if !self.is_editing {
@@ -47,12 +51,14 @@ impl NotesApp {
             let cursor = self.active_cursor();
             let len = self.active_text().0.chars().count();
             if cursor >= len {
+                self.discard_unchanged_edit();
                 return;
             }
             self.replace_active_range(cursor, cursor + 1, "", multiline, 0, 0);
             self.place_active_cursor(cursor);
         }
         self.after_clipboard_edit(cx);
+        self.discard_unchanged_edit();
     }
 
     /// Removes the selected inline or standalone image. Returns false when nothing is selected.
@@ -123,6 +129,7 @@ impl NotesApp {
         let Some((start, end, selected, multiline)) = self.active_selection() else {
             return;
         };
+        self.record_edit(crate::app::history::EditKind::Clipboard);
         cx.write_to_clipboard(gpui::ClipboardItem::new_string(selected));
         self.replace_active_range(start, end, "", multiline, 0, 0);
         self.after_clipboard_edit(cx);
@@ -147,6 +154,7 @@ impl NotesApp {
         if clipboard_text.is_empty() {
             return;
         }
+        self.record_edit(crate::app::history::EditKind::Clipboard);
         if self.pending_caret.is_some()
             && self.active_field == ActiveField::Body
             && self.active_text_block_id.is_none()

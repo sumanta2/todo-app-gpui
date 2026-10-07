@@ -27,6 +27,7 @@ impl NotesApp {
             defer_images: true,
             is_editing: false,
             note_dirty: false,
+            history: crate::app::history::History::default(),
             save_queued: false,
             active_field: ActiveField::Heading,
             edit_heading: String::new(),
@@ -184,8 +185,13 @@ impl NotesApp {
     /// The function clones the saved note content into the editable structure, loads the
     /// active section/page state, and resets the input fields used by the editing UI.
     pub(crate) fn start_edit(&mut self, cx: &mut Context<Self>) {
-        if let Some(ref selected_id) = self.selected_note_id {
-            if let Some(note) = self.notes.iter().find(|n| n.id == *selected_id) {
+        let Some(selected_id) = self.selected_note_id.clone() else {
+            return;
+        };
+        if self.notes.iter().any(|n| n.id == selected_id) {
+            self.clear_history();
+        }
+        if let Some(note) = self.notes.iter().find(|n| n.id == selected_id) {
                 let content = load_note_content(&note.body, &note.images);
                 self.edit_content = Some(content.clone());
 
@@ -243,7 +249,6 @@ impl NotesApp {
                 self.active_field = ActiveField::Heading;
                 cx.notify();
             }
-        }
     }
 
     /// Copies the current body editor state into the active text block on the canvas.

@@ -254,6 +254,9 @@ impl NotesApp {
                             }
                         }
                     }
+                    let canvas_edited = this.drag_item_id.is_some()
+                        || this.resize_item_id.is_some()
+                        || this.inline_image_gesture.is_some();
                     this.drag_item_id = None;
                     this.drag_start_mouse = None;
                     this.drag_start_item_pos = None;
@@ -264,13 +267,10 @@ impl NotesApp {
                     this.is_panning = false;
                     this.pan_start_mouse = None;
                     this.pan_start_val = None;
-                    let canvas_edited = this.drag_item_id.is_some()
-                        || this.resize_item_id.is_some()
-                        || this.inline_image_gesture.is_some();
                     this.inline_image_gesture = None;
                     this.page_sidebar_resizing = false;
                     if canvas_edited {
-                        this.schedule_autosave(cx);
+                        this.end_canvas_gesture(cx);
                     }
                     cx.notify();
                 }),

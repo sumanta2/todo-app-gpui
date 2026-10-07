@@ -105,6 +105,7 @@ impl NotesApp {
                         .on_mouse_down(
                             MouseButton::Left,
                             cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                                this.begin_canvas_gesture();
                                 this.drag_item_id = Some(drag_id_clone.clone());
                                 this.drag_start_mouse = Some(event.position);
                                 this.drag_start_item_pos = Some(t_pos);
@@ -129,6 +130,7 @@ impl NotesApp {
                                 .on_mouse_down(
                                     MouseButton::Left,
                                     cx.listener(move |this, _, _, cx| {
+                                        this.record_edit(crate::app::history::EditKind::Canvas);
                                         this.edit_canvas_items.retain(|item| match item {
                                             CanvasItem::Text(tx) => tx.id != delete_id,
                                             _ => true,
@@ -197,6 +199,7 @@ impl NotesApp {
                             .on_mouse_down(
                                 MouseButton::Left,
                                 cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                                    this.begin_canvas_gesture();
                                     this.resize_item_id = Some(resize_id.clone());
                                     this.resize_block_index = None;
                                     this.resize_start_mouse = Some(event.position);
@@ -238,6 +241,7 @@ impl NotesApp {
                                     MouseButton::Left,
                                     cx.listener(
                                         move |this, event: &gpui::MouseDownEvent, _, cx| {
+                                            this.begin_canvas_gesture();
                                             this.drag_item_id = Some(drag_id_clone.clone());
                                             this.drag_start_mouse = Some(event.position);
                                             this.drag_start_item_pos = Some(img_pos);
@@ -263,6 +267,7 @@ impl NotesApp {
                                         .on_mouse_down(
                                             MouseButton::Left,
                                             cx.listener(move |this, _, _, cx| {
+                                                this.record_edit(crate::app::history::EditKind::Canvas);
                                                 this.edit_canvas_items.retain(|item| match item {
                                                     CanvasItem::Image(im) => im.id != delete_id,
                                                     _ => true,
@@ -302,6 +307,7 @@ impl NotesApp {
                                         MouseButton::Left,
                                         cx.listener(
                                             move |this, event: &gpui::MouseDownEvent, _, cx| {
+                                                this.begin_canvas_gesture();
                                                 this.resize_item_id = Some(resize_id.clone());
                                                 this.resize_block_index = None;
                                                 this.resize_start_mouse = Some(event.position);
@@ -351,6 +357,7 @@ impl NotesApp {
                         .on_mouse_down(
                             MouseButton::Left,
                             cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                                this.begin_canvas_gesture();
                                 this.drag_item_id = Some(drag_id_clone.clone());
                                 this.drag_start_mouse = Some(event.position);
                                 this.drag_start_item_pos = Some(m_pos);
@@ -375,6 +382,7 @@ impl NotesApp {
                                 .on_mouse_down(
                                     MouseButton::Left,
                                     cx.listener(move |this, _, _, cx| {
+                                        this.record_edit(crate::app::history::EditKind::Canvas);
                                         this.edit_canvas_items.retain(|item| match item {
                                             CanvasItem::Mixed(mx) => mx.id != delete_id,
                                             _ => true,
@@ -489,6 +497,7 @@ impl NotesApp {
                             .on_mouse_down(
                                 MouseButton::Left,
                                 cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                                    this.begin_canvas_gesture();
                                     this.resize_item_id = Some(resize_id.clone());
                                     this.resize_block_index = None;
                                     this.resize_start_mouse = Some(event.position);
@@ -583,6 +592,7 @@ impl NotesApp {
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                    this.begin_canvas_gesture();
                     this.selected_inline_image = Some((move_id.clone(), block_idx));
                     this.inline_image_gesture = Some(crate::app::InlineImageGesture {
                         item_id: move_id.clone(),
@@ -665,6 +675,7 @@ impl NotesApp {
         knob.on_mouse_down(
             MouseButton::Left,
             cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                this.begin_canvas_gesture();
                 this.selected_inline_image = Some((item_id.clone(), block_idx));
                 this.inline_image_gesture = Some(crate::app::InlineImageGesture {
                     item_id: item_id.clone(),

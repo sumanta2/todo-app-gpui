@@ -36,6 +36,19 @@ impl NotesApp {
             return;
         }
 
+        if self.is_editing && control && !shift && key.eq_ignore_ascii_case("z") {
+            self.undo(cx);
+            return;
+        }
+        if self.is_editing && control && !shift && key.eq_ignore_ascii_case("y") {
+            self.redo(cx);
+            return;
+        }
+        if self.is_editing && control && shift && key.eq_ignore_ascii_case("z") {
+            self.redo(cx);
+            return;
+        }
+
         // Shortcut: Ctrl + N (Create New Note)
         if control && key.eq_ignore_ascii_case("n") {
             self.create_note(cx);
@@ -253,6 +266,13 @@ impl NotesApp {
                 self.paste_clipboard(cx);
                 return;
             }
+        }
+
+        if records_text_edit(event, self.active_field) {
+            self.record_edit(crate::app::history::EditKind::typing(
+                self.active_field,
+                self.active_text_block_id.clone(),
+            ));
         }
 
         if self.pending_caret.is_some()
@@ -862,6 +882,19 @@ impl NotesApp {
             }
         }
     }
+}
+
+/// True when this key inserts or deletes characters in the focused field.
+fn records_text_edit(event: &gpui::KeyDownEvent, field: crate::models::ActiveField) -> bool {
+    let key = event.keystroke.key.as_str();
+    let control = event.keystroke.modifiers.control || event.keystroke.modifiers.platform;
+    if key.eq_ignore_ascii_case("backspace") || key.eq_ignore_ascii_case("delete") {
+        return true;
+    }
+    if key.eq_ignore_ascii_case("enter") {
+        return !control && field == crate::models::ActiveField::Body;
+    }
+    !control && event.keystroke.key_char.is_some()
 }
 
 /// True when this key should turn a blinking caret into a real text box.

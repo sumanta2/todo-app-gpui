@@ -106,6 +106,7 @@ impl NotesApp {
         if !self.is_editing || self.active_field != ActiveField::Body {
             return;
         }
+        self.record_edit(crate::app::history::EditKind::Format);
 
         let char_count = self.edit_body.chars().count();
         let cursor = self.edit_body_cursor;
@@ -137,6 +138,7 @@ impl NotesApp {
         self.touch_body_layout();
         self.sync_active_text_block();
         self.schedule_autosave(cx);
+        self.discard_unchanged_edit();
         cx.notify();
     }
 
@@ -212,6 +214,7 @@ impl NotesApp {
                 let start = start.min(char_count);
                 let end = end.min(char_count);
                 if start < end {
+                    self.record_edit(crate::app::history::EditKind::Format);
                     let values = if font {
                         &mut self.edit_body_font_color
                     } else {
@@ -226,6 +229,7 @@ impl NotesApp {
                     self.touch_body_layout();
                     self.sync_active_text_block();
                     self.schedule_autosave(cx);
+                    self.discard_unchanged_edit();
                 }
             }
         }

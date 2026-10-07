@@ -10,32 +10,50 @@ use crate::text::selection::get_selection_range;
 impl NotesApp {
     /// Increases the indent of the selected lines, or nudges a selected image right.
     pub(crate) fn increase_indent(&mut self, cx: &mut Context<Self>) {
+        if self.is_editing {
+            self.record_edit(crate::app::history::EditKind::Format);
+        }
         if self.nudge_selected_image(INDENT_STEP) {
             self.schedule_autosave(cx);
             cx.notify();
-            return;
+        } else {
+            self.change_line_indent(1, cx);
         }
-        self.change_line_indent(1, cx);
+        if self.is_editing {
+            self.discard_unchanged_edit();
+        }
     }
 
     /// Decreases the indent of the selected lines, or nudges a selected image left.
     pub(crate) fn decrease_indent(&mut self, cx: &mut Context<Self>) {
+        if self.is_editing {
+            self.record_edit(crate::app::history::EditKind::Format);
+        }
         if self.nudge_selected_image(-INDENT_STEP) {
             self.schedule_autosave(cx);
             cx.notify();
-            return;
+        } else {
+            self.change_line_indent(-1, cx);
         }
-        self.change_line_indent(-1, cx);
+        if self.is_editing {
+            self.discard_unchanged_edit();
+        }
     }
 
     /// Aligns the selected lines, or a selected image, to the left, center, or right.
     pub(crate) fn align_content(&mut self, align: u8, cx: &mut Context<Self>) {
+        if self.is_editing {
+            self.record_edit(crate::app::history::EditKind::Format);
+        }
         if self.align_selected_image(align) {
             self.schedule_autosave(cx);
             cx.notify();
-            return;
+        } else {
+            self.change_line_align(align, cx);
         }
-        self.change_line_align(align, cx);
+        if self.is_editing {
+            self.discard_unchanged_edit();
+        }
     }
 
     /// Alignment of the caret line, or of the selected image when one is active.

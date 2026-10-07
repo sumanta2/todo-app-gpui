@@ -133,6 +133,26 @@ impl NotesApp {
                 .flex_row()
                 .items_center()
                 .child(clip_button(
+                    "fmt-undo",
+                    "\u{E7A7}",
+                    "Undo",
+                    "Ctrl+Z",
+                    "Reverse the last change to this note.",
+                    self.can_undo(),
+                    cx,
+                    ClipAction::Undo,
+                ))
+                .child(clip_button(
+                    "fmt-redo",
+                    "\u{E7A6}",
+                    "Redo",
+                    "Ctrl+Y",
+                    "Apply the change that was just undone.",
+                    self.can_redo(),
+                    cx,
+                    ClipAction::Redo,
+                ))
+                .child(clip_button(
                     "fmt-paste",
                     "\u{E77F}",
                     "Paste",

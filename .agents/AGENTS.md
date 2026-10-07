@@ -31,7 +31,12 @@ todo-app-gpui/
 │   │   ├── editing.rs            # Open, sync, save, and cancel an editing session
 │   │   ├── formatting.rs         # Character styles and font settings
 │   │   ├── keyboard.rs           # Key routing into the active field
-│   │   └── storage.rs            # notes.json and encrypted image files
+│   │   ├── storage.rs            # notes.json and encrypted image files
+│   │   └── history/              # Undo and redo. See UNDO_REDO.md before changing content
+│   │       ├── mod.rs            # Stacks, record_edit, undo, and redo
+│   │       ├── kind.rs           # EditKind and which edits merge
+│   │       ├── snapshot.rs       # Capture and restore one document step
+│   │       └── tests.rs          # In-memory regression tests
 │   ├── canvas/                   # The page surface
 │   │   ├── editor.rs             # Editable canvas shell: pan, drag, pointer routing
 │   │   ├── header.rs             # Section tabs and inline heading editors
@@ -103,6 +108,7 @@ graph TD
 
 ### Step 2: Implement State Mutation Logic
 * Add the method to the `src/app/` module that already owns that job (`notebook`, `outline`, `editing`, `formatting`, `keyboard`, or `storage`).
+* If the change edits notebook content, call `NotesApp::record_edit` first. See [UNDO_REDO.md](file:///c:/Users/gorai/OneDrive/Desktop/todo-app-gpui/UNDO_REDO.md).
 * Update `NotesApp` state methods to handle the new capability and call `cx.notify()` to alert GPUI.
 
 ### Step 3: Implement/Update the UI View

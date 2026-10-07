@@ -79,6 +79,9 @@ impl NotesApp {
     /// 4. encrypts the raw bytes before storing them,
     /// 5. pushes a corresponding `ImageItem` into the canvas state so it can be rendered later.
     pub(crate) fn attach_image_to_note(&mut self, img: &gpui::Image, cx: &mut Context<Self>) {
+        if self.is_editing {
+            self.record_edit(crate::app::history::EditKind::Image);
+        }
         if let Some(ref selected_id) = self.selected_note_id {
             let ext = match img.format {
                 gpui::ImageFormat::Png => "png",
@@ -124,6 +127,7 @@ impl NotesApp {
                 }
             }
         }
+        self.discard_unchanged_edit();
     }
 
     /// Splits the currently focused text block at the cursor and inserts a new image between

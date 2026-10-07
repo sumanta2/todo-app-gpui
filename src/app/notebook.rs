@@ -80,6 +80,7 @@ impl NotesApp {
     pub(crate) fn delete_note(&mut self, id: String, cx: &mut Context<Self>) {
         self.notes.retain(|n| n.id != id);
         if self.selected_note_id == Some(id) {
+            self.clear_history();
             self.selected_note_id = None;
             self.is_editing = false;
         }

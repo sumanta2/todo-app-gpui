@@ -192,6 +192,9 @@ impl NotesApp {
 
     /// Adds a new section to the currently edited note and immediately opens its first page.
     pub(crate) fn add_section(&mut self, cx: &mut Context<Self>) {
+        if self.is_editing && self.edit_content.is_some() {
+            self.record_edit(crate::app::history::EditKind::Structure);
+        }
         if let Some(ref mut content) = self.edit_content {
             let new_sec_id = chrono::Local::now().timestamp_millis().to_string();
             let new_page_id = format!("{}_page", new_sec_id);
@@ -213,6 +216,14 @@ impl NotesApp {
 
     /// Removes a section from the current editing content if more than one section remains.
     pub(crate) fn delete_section(&mut self, section_id: String, cx: &mut Context<Self>) {
+        let removes = self.is_editing
+            && self
+                .edit_content
+                .as_ref()
+                .is_some_and(|content| content.sections.len() > 1);
+        if removes {
+            self.record_edit(crate::app::history::EditKind::Structure);
+        }
         let mut should_switch = None;
         if let Some(ref mut content) = self.edit_content {
             if content.sections.len() > 1 {
@@ -237,6 +248,16 @@ impl NotesApp {
 
     /// Adds a new page to the active section and immediately switches to it.
     pub(crate) fn add_page(&mut self, cx: &mut Context<Self>) {
+        let adds = self.is_editing
+            && match (&self.edit_content, &self.active_section_id) {
+                (Some(content), Some(section_id)) => {
+                    content.sections.iter().any(|section| section.id == *section_id)
+                }
+                _ => false,
+            };
+        if adds {
+            self.record_edit(crate::app::history::EditKind::Structure);
+        }
         if let Some(ref mut content) = self.edit_content {
             if let Some(ref sec_id) = self.active_section_id {
                 if let Some(section) = content.sections.iter_mut().find(|s| s.id == *sec_id) {
@@ -257,6 +278,18 @@ impl NotesApp {
 
     /// Deletes a page from the active section while preserving the section when possible.
     pub(crate) fn delete_page(&mut self, page_id: String, cx: &mut Context<Self>) {
+        let removes = self.is_editing
+            && match (&self.edit_content, &self.active_section_id) {
+                (Some(content), Some(section_id)) => content
+                    .sections
+                    .iter()
+                    .find(|section| section.id == *section_id)
+                    .is_some_and(|section| section.pages.len() > 1),
+                _ => false,
+            };
+        if removes {
+            self.record_edit(crate::app::history::EditKind::Structure);
+        }
         let mut should_switch: Option<(String, String)> = None;
         if let Some(ref mut content) = self.edit_content {
             if let Some(ref sec_id) = self.active_section_id {

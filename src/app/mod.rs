@@ -9,9 +9,11 @@
 //! - `clipboard` — cut, copy, and paste for the focused note field
 //! - `paragraph` — line indent and alignment inside a text box
 //! - `storage` — notes.json and image files
+//! - `history` — undo and redo snapshots for the open edit session
 
 pub(crate) mod clipboard;
 pub(crate) mod editing;
+pub(crate) mod history;
 pub(crate) mod formatting;
 pub(crate) mod keyboard;
 pub(crate) mod notebook;
@@ -89,6 +91,8 @@ pub struct NotesApp {
     pub(crate) is_editing: bool,
     /// Edit session has changes that are not in `notes.json` yet.
     pub(crate) note_dirty: bool,
+    /// Undo and redo for this edit session. Not written to `notes.json`.
+    pub(crate) history: history::History,
     /// A delayed auto-save is already waiting to write.
     pub(crate) save_queued: bool,
     pub(crate) active_field: ActiveField,

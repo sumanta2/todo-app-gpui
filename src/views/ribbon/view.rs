@@ -105,6 +105,9 @@ impl NotesApp {
 
 const VIEW_TEXT: f32 = 16.0;
 const VIEW_INK: u32 = 0x4a3f2c;
+/// Home's color button sets that menu's height: 6px padding, a 14px glyph, an 8px gap,
+/// and a 3px bar. View text is 16px, so this padding makes the View row the same height.
+const VIEW_PAD_V: f32 = (RIBBON_PAD_V * 2.0 + 7.0 + RIBBON_GAP + 3.0 - VIEW_TEXT) / 2.0;
 /// Zoom dropdown trigger. One third narrower than the 132px font dropdown.
 pub(super) const ZOOM_DROPDOWN_W: f32 = 70.0;
 
@@ -118,7 +121,7 @@ fn zoom_step_button(
 ) -> AnyElement {
     let mut button = div()
         .id(id)
-        .py(px(RIBBON_PAD_V))
+        .py(px(VIEW_PAD_V))
         .min_w(px(36.0))
         .px(px(RIBBON_PAD_H))
         .flex()
@@ -183,7 +186,7 @@ fn zoom_picker(
     div()
         .id("zoom-picker")
         .relative()
-        .py(px(RIBBON_PAD_V))
+        .py(px(VIEW_PAD_V))
         .w(px(ZOOM_DROPDOWN_W))
         .px(px(RIBBON_PAD_H))
         .flex()
@@ -269,7 +272,7 @@ fn view_mode_button(
 ) -> AnyElement {
     div()
         .id(id)
-        .py(px(RIBBON_PAD_V))
+        .py(px(VIEW_PAD_V))
         .px(px(RIBBON_PAD_H))
         .flex()
         .items_center()

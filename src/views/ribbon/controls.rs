@@ -565,6 +565,7 @@ pub(super) fn format_button(
         .text_size(px(RIBBON_ICON))
         .font_weight(gpui::FontWeight::BOLD)
         .text_color(rgb(label_color))
+        .h(px(29.0))
         .flex()
         .items_center()
         .justify_center();

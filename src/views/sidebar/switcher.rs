@@ -4,7 +4,7 @@ use gpui::{div, prelude::*, px, rgb, AnyElement, Context, MouseButton};
 
 use crate::app::NotesApp;
 use crate::constants::colors::{
-    SIDEBAR_BG, SIDEBAR_HOVER, SIDEBAR_ITEM, SIDEBAR_ITEM_TEXT, SIDEBAR_SELECTED,
+    sidebar_bg, sidebar_hover, sidebar_item, sidebar_item_text, sidebar_selected,
 };
 use crate::models::ActiveField;
 
@@ -28,15 +28,15 @@ impl NotesApp {
             .items_center()
             .gap(px(6.0))
             .bg(if open {
-                rgb(SIDEBAR_HOVER)
+                rgb(sidebar_hover())
             } else {
-                rgb(SIDEBAR_ITEM)
+                rgb(sidebar_item())
             })
             .child(
                 div()
                     .font_family("Segoe MDL2 Assets")
                     .text_size(px(14.0))
-                    .text_color(rgb(SIDEBAR_ITEM_TEXT))
+                    .text_color(rgb(sidebar_item_text()))
                     .child("\u{E8F1}"),
             )
             .child(
@@ -46,7 +46,7 @@ impl NotesApp {
                     .cursor_text()
                     .text_size(px(self.section_name_font_size))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(rgb(SIDEBAR_ITEM_TEXT))
+                    .text_color(rgb(sidebar_item_text()))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|this, _, window, cx| {
@@ -73,7 +73,7 @@ impl NotesApp {
                     .cursor_pointer()
                     .px(px(2.0))
                     .text_size(px(10.0))
-                    .text_color(rgb(SIDEBAR_ITEM_TEXT))
+                    .text_color(rgb(sidebar_item_text()))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|this, _, _, cx| {
@@ -94,7 +94,7 @@ impl NotesApp {
                     .flex()
                     .items_center()
                     .justify_center()
-                    .hover(|style| style.bg(rgb(SIDEBAR_HOVER)))
+                    .hover(|style| style.bg(rgb(sidebar_hover())))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|this, _, _, cx| {
@@ -106,7 +106,7 @@ impl NotesApp {
                         div()
                             .font_family("Segoe MDL2 Assets")
                             .text_size(px(14.0))
-                            .text_color(rgb(SIDEBAR_ITEM_TEXT))
+                            .text_color(rgb(sidebar_item_text()))
                             .child("\u{E718}"),
                     ),
             )
@@ -124,9 +124,9 @@ impl NotesApp {
             .left(px(8.0))
             .w(px(220.0))
             .p(px(4.0))
-            .bg(rgb(SIDEBAR_BG))
+            .bg(rgb(sidebar_bg()))
             .border_1()
-            .border_color(rgb(SIDEBAR_ITEM_TEXT))
+            .border_color(rgb(sidebar_item_text()))
             .rounded(px(6.0))
             .flex()
             .flex_col()
@@ -152,15 +152,15 @@ impl NotesApp {
                     .items_center()
                     .cursor_pointer()
                     .bg(if selected {
-                        rgb(SIDEBAR_SELECTED)
+                        rgb(sidebar_selected())
                     } else {
-                        rgb(SIDEBAR_ITEM)
+                        rgb(sidebar_item())
                     })
                     .hover(|style| {
                         style.bg(rgb(if selected {
-                            SIDEBAR_SELECTED
+                            sidebar_selected()
                         } else {
-                            SIDEBAR_HOVER
+                            sidebar_hover()
                         }))
                     })
                     .on_mouse_down(
@@ -174,7 +174,7 @@ impl NotesApp {
                         div()
                             .text_size(px(self.section_name_font_size))
                             .font_family("Lato")
-                            .text_color(rgb(SIDEBAR_ITEM_TEXT))
+                            .text_color(rgb(sidebar_item_text()))
                             .child(name),
                     ),
             );

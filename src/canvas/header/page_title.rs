@@ -37,14 +37,14 @@ impl NotesApp {
                                 .mt(px(2.0))
                                 .h(px(1.0))
                                 .w(px(line_w))
-                                .bg(rgb(crate::constants::colors::ONENOTE_INK_MUTED)),
+                                .bg(rgb(crate::constants::colors::onenote_ink_muted())),
                         ),
                     ),
             )
             .child(
                 div()
                     .text_size(px(13.0 * zoom))
-                    .text_color(rgb(crate::constants::colors::NOTE_HINT))
+                    .text_color(rgb(crate::constants::colors::note_hint()))
                     .child(date),
             )
             .into_any_element()

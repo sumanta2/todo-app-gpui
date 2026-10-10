@@ -3,7 +3,7 @@
 use gpui::{div, prelude::*, px, rgb, AnyElement, Context, MouseButton};
 
 use crate::app::NotesApp;
-use crate::constants::colors::NOTE_INK;
+use crate::constants::colors::note_ink;
 use crate::models::{CanvasItem, ContentBlock, TextStyleSpans};
 
 impl NotesApp {
@@ -315,13 +315,13 @@ impl NotesApp {
                 if runs.is_empty() {
                     line_runs_els.push(
                         div()
-                            .text_color(rgb(NOTE_INK))
+                            .text_color(rgb(note_ink()))
                             .child("\u{00A0}")
                             .into_any_element(),
                     );
                 } else {
                     for run in &runs {
-                        let color = NOTE_INK;
+                        let color = note_ink();
                         line_runs_els.push(crate::canvas::text_editor::styled_run_element(
                             run, color, true, zoom,
                         ));

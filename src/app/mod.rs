@@ -9,6 +9,7 @@
 //! - `clipboard` — cut, copy, and paste for the focused note field
 //! - `paragraph` — line indent and alignment inside a text box
 //! - `storage` — notes.json and image files
+//! - `metadata` — pinned left bar and ribbon, saved for the next launch
 //! - `history` — undo and redo snapshots for the open edit session
 
 pub(crate) mod clipboard;
@@ -16,6 +17,7 @@ pub(crate) mod editing;
 pub(crate) mod history;
 pub(crate) mod formatting;
 pub(crate) mod keyboard;
+pub(crate) mod metadata;
 pub(crate) mod notebook;
 pub(crate) mod outline;
 pub(crate) mod paragraph;
@@ -66,8 +68,10 @@ pub(crate) enum InlineGestureKind {
 }
 
 /// Which ribbon menu fills the shared pin slot under the ribbon.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum RibbonPane {
+    #[default]
     Home,
     View,
 }
@@ -212,7 +216,7 @@ pub struct NotesApp {
     pub(crate) active_section_tab_x: f32,
 
     // Sidebar State
-    /// When true, the notebook list stays pinned on the left.
+    /// When true, the notebook list stays pinned on the left. Saved in `metadata.json`.
     pub(crate) is_sidebar_open: bool,
     /// Text typed into the title-bar search box. Filters the notebook list.
     pub(crate) title_search: String,
@@ -245,7 +249,7 @@ pub struct NotesApp {
     pub(crate) font_color_menu_open: bool,
     /// Whether the highlight-color list is open.
     pub(crate) bg_color_menu_open: bool,
-    /// One shared pin. The menu in `ribbon_pane` stays fixed under the ribbon.
+    /// One shared pin. The menu in `ribbon_pane` stays fixed under the ribbon. Saved in `metadata.json`.
     pub(crate) ribbon_pinned: bool,
     /// Which ribbon menu occupies the shared pin slot.
     pub(crate) ribbon_pane: RibbonPane,

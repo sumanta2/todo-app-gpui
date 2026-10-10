@@ -9,8 +9,8 @@ use crate::app::formatting::TextStyleKind;
 use crate::app::NotesApp;
 use crate::constants::{
     colors::{
-        NOTE_PAGE, ONENOTE_ACCENT, ONENOTE_BAR_LINE, ONENOTE_INK, ONENOTE_INK_MUTED,
-        ONENOTE_PAGE_SELECTED,
+        note_page, onenote_accent, onenote_bar_line, onenote_ink, onenote_ink_muted,
+        onenote_page_selected,
     },
     typography::{
         font_size_label, FONT_SIZE_OPTIONS, FONT_STYLE_OPTIONS, RIBBON_GAP, RIBBON_ICON,
@@ -29,9 +29,9 @@ impl Render for FormatTooltip {
     fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
         div()
             .p(px(8.0))
-            .bg(rgb(NOTE_PAGE))
+            .bg(rgb(note_page()))
             .border_1()
-            .border_color(rgb(ONENOTE_BAR_LINE))
+            .border_color(rgb(onenote_bar_line()))
             .flex()
             .flex_col()
             .gap(px(2.0))
@@ -39,13 +39,13 @@ impl Render for FormatTooltip {
                 div()
                     .text_size(px(RIBBON_TEXT))
                     .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .text_color(rgb(ONENOTE_INK))
+                    .text_color(rgb(onenote_ink()))
                     .child(format!("{} ({})", self.label, self.shortcut)),
             )
             .child(
                 div()
                     .text_size(px(11.0))
-                    .text_color(rgb(ONENOTE_INK_MUTED))
+                    .text_color(rgb(onenote_ink_muted()))
                     .child(self.description),
             )
     }
@@ -73,25 +73,25 @@ pub(super) fn ribbon_dropdown(
         .items_center()
         .justify_between()
         .cursor_pointer()
-        .when(open, |this| this.bg(rgb(ONENOTE_PAGE_SELECTED)))
+        .when(open, |this| this.bg(rgb(onenote_page_selected())))
         .hover(|style| {
             if open {
-                style.bg(rgb(ONENOTE_PAGE_SELECTED))
+                style.bg(rgb(onenote_page_selected()))
             } else {
-                style.bg(rgb(ONENOTE_BAR_LINE))
+                style.bg(rgb(onenote_bar_line()))
             }
         })
         .on_mouse_down(MouseButton::Left, cx.listener(on_click))
         .child(
             div()
                 .text_size(px(RIBBON_TEXT))
-                .text_color(rgb(ONENOTE_INK))
+                .text_color(rgb(onenote_ink()))
                 .child(label),
         )
         .child(
             div()
                 .text_size(px(RIBBON_TEXT))
-                .text_color(rgb(ONENOTE_INK_MUTED))
+                .text_color(rgb(onenote_ink_muted()))
                 .child(if open { "▴" } else { "▾" }),
         )
         .children(popup)
@@ -158,12 +158,12 @@ fn menu_choice(
         .flex()
         .items_center()
         .cursor_pointer()
-        .hover(|style| style.bg(rgb(ONENOTE_BAR_LINE)))
+        .hover(|style| style.bg(rgb(onenote_bar_line())))
         .on_mouse_down(MouseButton::Left, cx.listener(on_click))
         .child(
             div()
                 .text_size(px(RIBBON_TEXT))
-                .text_color(rgb(ONENOTE_INK))
+                .text_color(rgb(onenote_ink()))
                 .when(selected, |this| this.font_weight(gpui::FontWeight::SEMIBOLD))
                 .child(label),
         )
@@ -176,8 +176,6 @@ pub(super) enum ClipAction {
     Copy,
     Paste,
     Delete,
-    Undo,
-    Redo,
 }
 
 #[derive(Clone, Copy)]
@@ -200,11 +198,11 @@ pub(super) fn layout_button(
     action: LayoutAction,
 ) -> AnyElement {
     let label_color = if !enabled {
-        ONENOTE_INK_MUTED
+        onenote_ink_muted()
     } else if active {
-        ONENOTE_INK
+        onenote_ink()
     } else {
-        ONENOTE_INK
+        onenote_ink()
     };
     let mut button = div()
         .id(id)
@@ -229,16 +227,16 @@ pub(super) fn layout_button(
                 .child(icon),
         );
     if active && enabled {
-        button = button.bg(rgb(ONENOTE_PAGE_SELECTED));
+        button = button.bg(rgb(onenote_page_selected()));
     }
     if enabled {
         button = button
             .cursor_pointer()
             .hover(|style| {
                 style.bg(if active {
-                    rgb(ONENOTE_PAGE_SELECTED)
+                    rgb(onenote_page_selected())
                 } else {
-                    rgb(ONENOTE_BAR_LINE)
+                    rgb(onenote_bar_line())
                 })
             })
             .on_mouse_down(
@@ -273,9 +271,9 @@ pub(super) fn clip_button(
     action: ClipAction,
 ) -> AnyElement {
     let label_color = if enabled {
-        ONENOTE_INK
+        onenote_ink()
     } else {
-        ONENOTE_INK_MUTED
+        onenote_ink_muted()
     };
     let mut button = div()
         .id(id)
@@ -303,7 +301,7 @@ pub(super) fn clip_button(
     if enabled {
         button = button
             .cursor_pointer()
-            .hover(|style| style.bg(rgb(ONENOTE_BAR_LINE)))
+            .hover(|style| style.bg(rgb(onenote_bar_line())))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(move |this, _, _, cx| {
@@ -316,8 +314,6 @@ pub(super) fn clip_button(
                         ClipAction::Copy => this.copy_selection(cx),
                         ClipAction::Paste => this.paste_clipboard(cx),
                         ClipAction::Delete => this.delete_forward(cx),
-                        ClipAction::Undo => this.undo(cx),
-                        ClipAction::Redo => this.redo(cx),
                     }
                     cx.stop_propagation();
                 }),
@@ -344,7 +340,7 @@ pub(super) fn color_button(
         .flex()
         .items_center()
         .justify_center()
-        .text_color(rgb(ONENOTE_INK))
+        .text_color(rgb(onenote_ink()))
         .child(mark);
     if font_mark {
         glyph = glyph
@@ -357,7 +353,7 @@ pub(super) fn color_button(
     }
     let mut bar_el = div().w(px(14.0)).h(px(3.0));
     if bar == 0 {
-        bar_el = bar_el.border_1().border_color(rgb(ONENOTE_INK_MUTED));
+        bar_el = bar_el.border_1().border_color(rgb(onenote_ink_muted()));
     } else {
         bar_el = bar_el.bg(rgb(bar));
     }
@@ -372,12 +368,12 @@ pub(super) fn color_button(
         .justify_center()
         .gap(px(2.0))
         .cursor_pointer()
-        .when(open, |this| this.bg(rgb(ONENOTE_PAGE_SELECTED)))
+        .when(open, |this| this.bg(rgb(onenote_page_selected())))
         .hover(|style| {
             if open {
-                style.bg(rgb(ONENOTE_PAGE_SELECTED))
+                style.bg(rgb(onenote_page_selected()))
             } else {
-                style.bg(rgb(ONENOTE_BAR_LINE))
+                style.bg(rgb(onenote_bar_line()))
             }
         })
         .tooltip(move |_window, cx| {
@@ -406,7 +402,7 @@ pub(super) fn color_button(
         .child(
             div()
                 .text_size(px(RIBBON_TEXT))
-                .text_color(rgb(ONENOTE_INK_MUTED))
+                .text_color(rgb(onenote_ink_muted()))
                 .child(if open { "▴" } else { "▾" }),
         )
         .children(popup)
@@ -417,7 +413,7 @@ pub(super) fn color_button(
 const COLOR_BOX: f32 = 20.0;
 
 pub(super) fn color_list(
-    options: &'static [u32],
+    options: &[u32],
     selected: u32,
     font: bool,
     samples: DropdownFlow,
@@ -429,7 +425,7 @@ pub(super) fn color_list(
 
 /// Color menu: a Default button on its own row, then samples laid out by `samples_flow`.
 fn color_palette(
-    options: &'static [u32],
+    options: &[u32],
     selected: u32,
     font: bool,
     samples_flow: DropdownFlow,
@@ -470,16 +466,16 @@ fn color_swatch(
         .cursor_pointer()
         .border_1()
         .border_color(rgb(if chosen {
-            ONENOTE_ACCENT
+            onenote_accent()
         } else {
-            ONENOTE_BAR_LINE
+            onenote_bar_line()
         }))
-        .when(chosen, |this| this.bg(rgb(ONENOTE_PAGE_SELECTED)))
+        .when(chosen, |this| this.bg(rgb(onenote_page_selected())))
         .hover(|style| {
-            style.border_color(rgb(ONENOTE_ACCENT)).bg(if chosen {
-                rgb(ONENOTE_PAGE_SELECTED)
+            style.border_color(rgb(onenote_accent())).bg(if chosen {
+                rgb(onenote_page_selected())
             } else {
-                rgb(ONENOTE_BAR_LINE)
+                rgb(onenote_bar_line())
             })
         })
         .on_mouse_down(
@@ -521,7 +517,7 @@ fn default_color_choice(
         .items_center()
         .justify_center()
         .cursor_pointer()
-        .hover(|style| style.bg(rgb(ONENOTE_BAR_LINE)))
+        .hover(|style| style.bg(rgb(onenote_bar_line())))
         .on_mouse_down(
             MouseButton::Left,
             cx.listener(move |this, _, _, cx| {
@@ -535,7 +531,7 @@ fn default_color_choice(
         .child(
             div()
                 .text_size(px(RIBBON_PAD_H))
-                .text_color(rgb(ONENOTE_INK))
+                .text_color(rgb(onenote_ink()))
                 .when(chosen, |this| this.font_weight(gpui::FontWeight::SEMIBOLD))
                 .child("Default"),
         )
@@ -557,11 +553,11 @@ pub(super) fn format_button(
     kind: TextStyleKind,
 ) -> AnyElement {
     let label_color = if !enabled {
-        ONENOTE_INK_MUTED
+        onenote_ink_muted()
     } else if active {
-        ONENOTE_INK
+        onenote_ink()
     } else {
-        ONENOTE_INK
+        onenote_ink()
     };
 
     let mut mark_el = div()
@@ -611,11 +607,11 @@ pub(super) fn format_button(
         });
 
     if active && enabled {
-        button = button.bg(rgb(ONENOTE_PAGE_SELECTED));
+        button = button.bg(rgb(onenote_page_selected()));
     } else if enabled {
         button = button
             .cursor_pointer()
-            .hover(|style| style.bg(rgb(ONENOTE_BAR_LINE)));
+            .hover(|style| style.bg(rgb(onenote_bar_line())));
     }
 
     button = button.child(mark_el);

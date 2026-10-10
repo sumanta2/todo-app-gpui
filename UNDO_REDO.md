@@ -15,8 +15,7 @@ Read this before changing notebook content, the snapshot, or the buttons. The co
 
 ## What the user sees
 
-- Title bar, top left: curved arrow icons. A dark arrow can be clicked. A gray arrow cannot.
-- Home ribbon: the same Undo and Redo icons beside the clipboard buttons.
+- Title bar, top left: curved arrow icons. Hover shows Undo or Redo. A dark arrow can be clicked. A gray arrow cannot.
 - Ctrl+Z undoes. Ctrl+Y and Ctrl+Shift+Z redo.
 - `can_undo` and `can_redo` are true only while editing and that stack has a step.
 

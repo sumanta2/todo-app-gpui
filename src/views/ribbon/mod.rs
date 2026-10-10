@@ -8,8 +8,10 @@ mod view;
 use gpui::{div, prelude::*, px, rgb, AnyElement, Context, MouseButton};
 
 use crate::app::{NotesApp, RibbonPane};
-use crate::constants::colors::{ONENOTE_BAR, ONENOTE_BAR_LINE};
-use crate::constants::typography::{RIBBON_PAD_H, RIBBON_PAD_V, RIBBON_TEXT};
+use crate::constants::colors::{
+    header_ribbon_bg, header_ribbon_bg_hover, header_ribbon_text, note_page, onenote_ink,
+};
+use crate::constants::typography::{RIBBON_PAD_H, RIBBON_TEXT};
 
 impl NotesApp {
     pub(crate) fn render_home_ribbon(&mut self, cx: &mut Context<Self>) -> AnyElement {
@@ -20,36 +22,37 @@ impl NotesApp {
             .w_full()
             .h(px(36.0))
             .flex_shrink_0()
-            .bg(rgb(crate::constants::colors::ONENOTE_BAR))
-            .border_b_1()
-            .border_color(rgb(crate::constants::colors::ONENOTE_BAR_LINE))
+            .bg(rgb(header_ribbon_bg()))
             .flex()
             .flex_row()
-            .items_center()
-            .px(px(RIBBON_PAD_H))
+            .items_end()
+            .pl(px(8.0))
+            .gap(px(2.0))
             .child(
                 div()
                     .id("home-ribbon-tab")
+                    .h(px(32.0))
                     .px(px(RIBBON_PAD_H))
-                    .py(px(RIBBON_PAD_V))
                     .cursor_pointer()
                     .flex()
                     .items_center()
                     .text_size(px(RIBBON_TEXT))
                     .font_family("Calibri")
-                    .font_weight(gpui::FontWeight::SEMIBOLD)
-                    .bg(if open {
-                        rgb(crate::constants::colors::ONENOTE_BAR_SELECTED)
+                    .font_weight(if open {
+                        gpui::FontWeight::SEMIBOLD
                     } else {
-                        rgb(crate::constants::colors::ONENOTE_BAR)
+                        gpui::FontWeight::NORMAL
                     })
-                    .text_color(rgb(crate::constants::colors::ONENOTE_INK))
+                    .bg(rgb(if open { note_page() } else { header_ribbon_bg() }))
+                    .text_color(rgb(if open { onenote_ink() } else { header_ribbon_text() }))
                     .hover(|style| {
-                        style.bg(rgb(if open {
-                            crate::constants::colors::ONENOTE_BAR_SELECTED
+                        if open {
+                            style
                         } else {
-                            crate::constants::colors::ONENOTE_BAR_HOVER
-                        }))
+                            style
+                                .bg(rgb(header_ribbon_bg_hover()))
+                                .text_color(rgb(header_ribbon_text()))
+                        }
                     })
                     .on_mouse_down(
                         MouseButton::Left,
@@ -92,9 +95,7 @@ impl NotesApp {
             div()
                 .w_full()
                 .flex_shrink_0()
-                .bg(rgb(ONENOTE_BAR))
-                .border_b_1()
-                .border_color(rgb(ONENOTE_BAR_LINE))
+                .bg(rgb(note_page()))
                 .child(menu)
                 .into_any_element(),
         )
@@ -105,26 +106,28 @@ impl NotesApp {
             || (self.ribbon_pinned && self.ribbon_pane == RibbonPane::View);
         div()
             .id("view-ribbon-tab")
+            .h(px(32.0))
             .px(px(RIBBON_PAD_H))
-            .py(px(RIBBON_PAD_V))
             .cursor_pointer()
             .flex()
             .items_center()
             .text_size(px(RIBBON_TEXT))
             .font_family("Calibri")
-            .font_weight(gpui::FontWeight::SEMIBOLD)
-            .bg(if open {
-                rgb(crate::constants::colors::ONENOTE_BAR_SELECTED)
+            .font_weight(if open {
+                gpui::FontWeight::SEMIBOLD
             } else {
-                rgb(crate::constants::colors::ONENOTE_BAR)
+                gpui::FontWeight::NORMAL
             })
-            .text_color(rgb(crate::constants::colors::ONENOTE_INK))
+            .bg(rgb(if open { note_page() } else { header_ribbon_bg() }))
+            .text_color(rgb(if open { onenote_ink() } else { header_ribbon_text() }))
             .hover(|style| {
-                style.bg(rgb(if open {
-                    crate::constants::colors::ONENOTE_BAR_SELECTED
+                if open {
+                    style
                 } else {
-                    crate::constants::colors::ONENOTE_BAR_HOVER
-                }))
+                    style
+                        .bg(rgb(header_ribbon_bg_hover()))
+                        .text_color(rgb(header_ribbon_text()))
+                }
             })
             .on_mouse_down(
                 MouseButton::Left,

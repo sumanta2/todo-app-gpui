@@ -11,7 +11,7 @@ use gpui::{
 };
 
 use crate::app::NotesApp;
-use crate::constants::colors::{NOTE_INK, NOTE_SELECTION};
+use crate::constants::colors::note_selection;
 use crate::constants::typography::{
     cursor_height_for_font_size, line_height_for_font_size, selection_height_for_font_size,
     CURSOR_WIDTH,
@@ -117,7 +117,7 @@ impl Render for SelectionOverlay {
                         ),
                         size: size(px(width * zoom), px(bar_h)),
                     };
-                    window.paint_quad(fill(rect, rgb(NOTE_SELECTION)));
+                    window.paint_quad(fill(rect, rgb(note_selection())));
                 }
                 if let Some((x, y)) = caret {
                     let rect = Bounds {
@@ -127,7 +127,7 @@ impl Render for SelectionOverlay {
                         ),
                         size: size(px(CURSOR_WIDTH), px(caret_h)),
                     };
-                    window.paint_quad(fill(rect, rgb(NOTE_INK)));
+                    window.paint_quad(fill(rect, rgb(crate::constants::colors::cursor())));
                 }
             },
         )

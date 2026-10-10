@@ -39,7 +39,7 @@ impl NotesApp {
                         .text_size(px(font_size))
                         .font_family("Calibri")
                         .font_weight(gpui::FontWeight::BOLD)
-                        .text_color(rgb(crate::constants::colors::NOTE_HINT))
+                        .text_color(rgb(crate::constants::colors::note_hint()))
                         .child("Section Name..."),
                 )
                 .child(if is_focused {
@@ -50,7 +50,7 @@ impl NotesApp {
                         .w(px(1.5))
                         .h(px(font_size + 1.0))
                         .bg(if self.cursor_visible {
-                            rgb(0x0078d4)
+                            rgb(crate::constants::colors::cursor())
                         } else {
                             rgba(0x00000000)
                         })
@@ -119,7 +119,7 @@ impl NotesApp {
                     .text_size(px(font_size))
                     .font_family("Calibri")
                     .font_weight(gpui::FontWeight::BOLD)
-                    .text_color(rgb(crate::constants::colors::ONENOTE_INK))
+                    .text_color(rgb(crate::constants::colors::onenote_ink()))
                     .child(if text.is_empty() {
                         "\u{00A0}".to_string()
                     } else {
@@ -151,7 +151,7 @@ impl NotesApp {
                                 .w(px(1.5))
                                 .h(px(font_size + 1.0))
                                 .bg(if self.cursor_visible {
-                                    rgb(crate::constants::colors::ONENOTE_INK)
+                                    rgb(crate::constants::colors::cursor())
                                 } else {
                                     rgba(0x00000000)
                                 })

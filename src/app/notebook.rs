@@ -18,6 +18,7 @@ impl NotesApp {
         if self.is_sidebar_open {
             self.note_menu_open = false;
         }
+        self.save_layout();
         cx.notify();
     }
 

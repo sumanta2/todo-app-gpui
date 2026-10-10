@@ -7,8 +7,8 @@ use gpui::{div, prelude::*, px, rgb, Context, IntoElement, Window};
 
 use crate::app::NotesApp;
 use crate::constants::colors::{
-    SIDEBAR_BG, SIDEBAR_CREATE, SIDEBAR_CREATE_HOVER, SIDEBAR_HOVER, SIDEBAR_ITEM,
-    SIDEBAR_ITEM_TEXT, SIDEBAR_ON_SELECTED, SIDEBAR_RULE, SIDEBAR_SELECTED,
+    onenote_bar_line, sidebar_bg, sidebar_create, sidebar_create_hover, sidebar_hover, sidebar_item,
+    sidebar_item_text, sidebar_on_selected, sidebar_selected,
 };
 use crate::models::ActiveField;
 
@@ -25,9 +25,9 @@ impl NotesApp {
         let mut sidebar = div()
             .w(if expanded { px(220.0) } else { px(44.0) })
             .h_full()
-            .bg(rgb(SIDEBAR_BG))
+            .bg(rgb(sidebar_bg()))
             .border_r_1()
-            .border_color(rgb(SIDEBAR_RULE))
+            .border_color(rgb(onenote_bar_line()))
             .flex()
             .flex_col()
             .pt(px(if expanded { 4.0 } else { 8.0 }))
@@ -46,9 +46,9 @@ impl NotesApp {
                         .justify_center()
                         .px(px(8.0))
                         .py(px(4.0))
-                        .bg(rgb(SIDEBAR_CREATE))
-                        .hover(|s| s.bg(rgb(SIDEBAR_CREATE_HOVER)))
-                        .text_color(rgb(SIDEBAR_ON_SELECTED))
+                        .bg(rgb(sidebar_create()))
+                        .hover(|s| s.bg(rgb(sidebar_create_hover())))
+                        .text_color(rgb(sidebar_on_selected()))
                         .font_family("Lato")
                         .font_weight(gpui::FontWeight::SEMIBOLD)
                         .cursor_pointer()
@@ -69,7 +69,7 @@ impl NotesApp {
                                 .font_family("Lato")
                                 .text_size(px(16.0))
                                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                                .text_color(rgb(SIDEBAR_ITEM_TEXT))
+                                .text_color(rgb(sidebar_item_text()))
                                 .child("All Notes"),
                         )
                         .child(self.render_sidebar_pin(cx)),
@@ -110,20 +110,20 @@ impl NotesApp {
                                         .min_h(px(48.0))
                                         .cursor_pointer()
                                         .bg(if is_selected {
-                                            rgb(SIDEBAR_SELECTED)
+                                            rgb(sidebar_selected())
                                         } else {
-                                            rgb(SIDEBAR_ITEM)
+                                            rgb(sidebar_item())
                                         });
                                     item = if is_selected {
-                                        item.border_1().border_color(rgb(0x4c592c))
+                                        item.border_1().border_color(rgb(onenote_bar_line()))
                                     } else {
-                                        item.border_b_1().border_color(rgb(SIDEBAR_RULE))
+                                        item.border_b_1().border_color(rgb(onenote_bar_line()))
                                     };
                                     item.hover(|s| {
                                         if is_selected {
                                             s
                                         } else {
-                                            s.bg(rgb(SIDEBAR_HOVER))
+                                            s.bg(rgb(sidebar_hover()))
                                         }
                                     })
                                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -136,9 +136,9 @@ impl NotesApp {
                                                 .font_family("Lato")
                                                 .font_weight(gpui::FontWeight::SEMIBOLD)
                                                 .text_color(rgb(if is_selected {
-                                                    0x000000
+                                                    sidebar_on_selected()
                                                 } else {
-                                                    SIDEBAR_ITEM_TEXT
+                                                    sidebar_item_text()
                                                 }))
                                                 .child(self.render_notebook_heading(
                                                     &note.heading,
@@ -168,7 +168,7 @@ impl NotesApp {
             .w(px(28.0))
             .h(px(28.0))
             .rounded(px(4.0))
-            .hover(|s| s.bg(rgb(SIDEBAR_HOVER)))
+            .hover(|s| s.bg(rgb(sidebar_hover())))
             .cursor_pointer()
             .on_click(cx.listener(|this, _, _, cx| {
                 this.toggle_sidebar(cx);
@@ -177,7 +177,7 @@ impl NotesApp {
                 div()
                     .font_family("Segoe MDL2 Assets")
                     .text_size(px(14.0))
-                    .text_color(rgb(SIDEBAR_ITEM_TEXT))
+                    .text_color(rgb(sidebar_item_text()))
                     .child("\u{E77A}"),
             )
             .into_any_element()

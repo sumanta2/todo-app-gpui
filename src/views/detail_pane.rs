@@ -4,7 +4,7 @@ use gpui::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButt
 
 use crate::app::NotesApp;
 use crate::constants::{
-    colors::ONENOTE_INK_MUTED,
+    colors::onenote_ink_muted,
     typography::{EMPTY_STATE_FONT_SIZE, SMALL_ICON_FONT_SIZE},
 };
 use crate::helpers::hash_str;
@@ -47,10 +47,10 @@ impl NotesApp {
             .justify_center()
             .gap(px(1.0))
             .cursor_pointer()
-            .bg(rgb(crate::constants::colors::ONENOTE_TAB_IDLE))
+            .bg(rgb(crate::constants::colors::onenote_tab_idle()))
             .border_1()
-            .border_color(rgb(crate::constants::colors::ONENOTE_BAR))
-            .hover(|style| style.bg(rgb(crate::constants::colors::ONENOTE_PAGE_SELECTED)))
+            .border_color(rgb(crate::constants::colors::onenote_bar()))
+            .hover(|style| style.bg(rgb(crate::constants::colors::onenote_page_selected())))
             .on_mouse_down(
                 MouseButton::Left,
                 cx.listener(|this, _, _, cx| {
@@ -65,14 +65,14 @@ impl NotesApp {
                 div()
                     .font_family("Segoe MDL2 Assets")
                     .text_size(px(12.0))
-                    .text_color(rgb(crate::constants::colors::ONENOTE_INK))
+                    .text_color(rgb(crate::constants::colors::onenote_ink()))
                     .child("\u{E76B}"),
             )
             .child(
                 div()
                     .font_family("Segoe MDL2 Assets")
                     .text_size(px(12.0))
-                    .text_color(rgb(crate::constants::colors::ONENOTE_INK))
+                    .text_color(rgb(crate::constants::colors::onenote_ink()))
                     .child("\u{E76C}"),
             )
             .into_any_element()
@@ -160,10 +160,10 @@ impl NotesApp {
                         .cursor_pointer();
                     if is_active {
                         page_row =
-                            page_row.bg(rgb(crate::constants::colors::ONENOTE_PAGE_SELECTED));
+                            page_row.bg(rgb(crate::constants::colors::onenote_page_selected()));
                     }
                     page_row = page_row
-                        .hover(|s| s.bg(rgb(crate::constants::colors::ONENOTE_TAB_IDLE)))
+                        .hover(|s| s.bg(rgb(crate::constants::colors::onenote_tab_idle())))
                         .on_click(cx.listener(move |this, _, _, cx| {
                             this.switch_to_page(active_sec_id.clone(), click_id.clone(), cx);
                         }))
@@ -175,7 +175,7 @@ impl NotesApp {
                             div()
                                 .font_family("Calibri")
                                 .text_size(px(self.page_list_font_size))
-                                .text_color(rgb(crate::constants::colors::ONENOTE_INK))
+                                .text_color(rgb(crate::constants::colors::onenote_ink()))
                                 .font_weight(if is_active {
                                     gpui::FontWeight::BOLD
                                 } else {
@@ -213,9 +213,9 @@ impl NotesApp {
                             .mb(px(6.0))
                             .px(px(8.0))
                             .py(px(4.0))
-                            .bg(rgb(crate::constants::colors::ONENOTE_PAGE_LIST))
-                            .hover(|s| s.bg(rgb(crate::constants::colors::ONENOTE_TAB_IDLE)))
-                            .text_color(rgb(crate::constants::colors::ONENOTE_ACCENT))
+                            .bg(rgb(crate::constants::colors::onenote_page_list()))
+                            .hover(|s| s.bg(rgb(crate::constants::colors::onenote_tab_idle())))
+                            .text_color(rgb(crate::constants::colors::onenote_accent()))
                             .font_family("Calibri")
                             .font_weight(gpui::FontWeight::SEMIBOLD)
                             .rounded(px(4.0))
@@ -235,9 +235,9 @@ impl NotesApp {
                     .relative()
                     .w(px(self.page_sidebar_width))
                     .h_full()
-                    .bg(rgb(crate::constants::colors::ONENOTE_PAGE_LIST))
+                    .bg(rgb(crate::constants::colors::onenote_page_list()))
                     .border_l_1()
-                    .border_color(rgb(crate::constants::colors::ONENOTE_BAR_LINE))
+                    .border_color(rgb(crate::constants::colors::onenote_bar_line()))
                     .p(px(6.0))
                     .flex()
                     .flex_col()
@@ -266,7 +266,7 @@ impl NotesApp {
                         div()
                             .font_family("Calibri")
                             .text_size(px(self.page_list_font_size))
-                            .text_color(rgb(crate::constants::colors::ONENOTE_INK_MUTED))
+                            .text_color(rgb(crate::constants::colors::onenote_ink_muted()))
                             .font_weight(gpui::FontWeight::BOLD)
                             .child("Pages"),
                     )
@@ -302,7 +302,7 @@ impl NotesApp {
                 .flex_1()
                 .h_full()
                 .min_w(px(0.0))
-                .bg(rgb(crate::constants::colors::ONENOTE_BAR))
+                .bg(rgb(crate::constants::colors::onenote_bar()))
                 .child(page)
                 .into_any_element()
         } else {
@@ -314,11 +314,11 @@ impl NotesApp {
                 .justify_center()
                 .flex_1()
                 .h_full()
-                .bg(rgb(crate::constants::colors::ONENOTE_BAR))
+                .bg(rgb(crate::constants::colors::onenote_bar()))
                 .child(
                     div()
                         .text_size(px(EMPTY_STATE_FONT_SIZE))
-                        .text_color(rgb(ONENOTE_INK_MUTED))
+                        .text_color(rgb(onenote_ink_muted()))
                         .child("Select a note or create a new one to begin"),
                 )
                 .into_any_element()

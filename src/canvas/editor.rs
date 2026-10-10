@@ -40,7 +40,7 @@ impl NotesApp {
             .id("note-body-canvas")
             .flex_1()
             .relative()
-            .bg(rgb(crate::constants::colors::NOTE_PAGE))
+            .bg(rgb(crate::constants::colors::note_page()))
             .overflow_hidden()
             .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
                 this.handle_canvas_scroll(event, cx);
@@ -301,7 +301,7 @@ impl NotesApp {
                         .w(px(crate::constants::typography::CURSOR_WIDTH))
                         .h(px(self.canvas_cursor_height()))
                         .bg(if self.cursor_visible {
-                            rgb(crate::constants::colors::NOTE_INK)
+                            rgb(crate::constants::colors::cursor())
                         } else {
                             gpui::rgba(0x00000000)
                         }),
@@ -323,7 +323,7 @@ impl NotesApp {
             .flex_col()
             .flex_1()
             .h_full()
-            .bg(rgb(crate::constants::colors::ONENOTE_BAR))
+            .bg(rgb(crate::constants::colors::onenote_bar()))
             .gap(px(0.0));
         if !self.full_page_view {
             page = page.child(section_tabs);

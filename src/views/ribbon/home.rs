@@ -6,8 +6,8 @@ use crate::app::formatting::TextStyleKind;
 use crate::app::NotesApp;
 use crate::constants::{
     colors::{
-        BG_COLOR_OPTIONS, FONT_COLOR_OPTIONS, NOTE_PAGE, ONENOTE_BAR_LINE, ONENOTE_INK,
-        ONENOTE_INK_MUTED,
+        bg_color_options, font_color_options, note_page, onenote_bar_line, onenote_ink,
+        onenote_ink_muted,
     },
     typography::{
         font_size_label,         font_style_name, RIBBON_DROPDOWN_W, RIBBON_GAP, RIBBON_ICON, RIBBON_PAD_H,
@@ -67,16 +67,20 @@ impl NotesApp {
         let mut menu = div()
             .relative()
             .pr(px(32.0))
-            .bg(rgb(NOTE_PAGE))
-            .left(px(0.0)) 
-            .border_1()
-            .border_color(rgb(ONENOTE_BAR_LINE))
+            .bg(rgb(note_page()))
+            .left(px(0.0))
+            .border_color(rgb(onenote_bar_line()))
             .flex()
             .flex_col()
             .gap(px(RIBBON_GAP))
             .on_mouse_down(MouseButton::Left, |_, _, cx| {
                 cx.stop_propagation();
             });
+        menu = if docked {
+            menu.w_full().border_b_1().border_l_1().border_r_1()
+        } else {
+            menu.border_1()
+        };
 
         if !editing {
             menu = menu.child(
@@ -84,7 +88,7 @@ impl NotesApp {
                     .px(px(RIBBON_PAD_H))
                     .py(px(RIBBON_PAD_V))
                     .text_size(px(RIBBON_TEXT))
-                    .text_color(rgb(ONENOTE_INK_MUTED))
+                    .text_color(rgb(onenote_ink_muted()))
                     .child("Edit the note to format text"),
             );
         }
@@ -106,8 +110,9 @@ impl NotesApp {
         let font_popup = font_open.then(|| dropdown_popup(132.0, 0.0, font_body));
         let size_body = font_size_list(self.typing_font_size_px, DropdownFlow::Column, cx);
         let size_popup = size_open.then(|| dropdown_popup(56.0, 0.0, size_body));
+        let font_colors = font_color_options();
         let font_color_body = color_list(
-            FONT_COLOR_OPTIONS,
+            &font_colors,
             shown_font_color,
             true,
             DropdownFlow::Wrap,
@@ -116,8 +121,9 @@ impl NotesApp {
         let font_color_popup = font_color_open.then(|| {
             dropdown_popup(RIBBON_DROPDOWN_W, DROPDOWN_PAD * 0.5, font_color_body)
         });
+        let bg_colors = bg_color_options();
         let bg_color_body = color_list(
-            BG_COLOR_OPTIONS,
+            &bg_colors,
             shown_bg_color,
             false,
             DropdownFlow::Wrap,
@@ -132,26 +138,6 @@ impl NotesApp {
                 .flex()
                 .flex_row()
                 .items_center()
-                .child(clip_button(
-                    "fmt-undo",
-                    "\u{E7A7}",
-                    "Undo",
-                    "Ctrl+Z",
-                    "Reverse the last change to this note.",
-                    self.can_undo(),
-                    cx,
-                    ClipAction::Undo,
-                ))
-                .child(clip_button(
-                    "fmt-redo",
-                    "\u{E7A6}",
-                    "Redo",
-                    "Ctrl+Y",
-                    "Apply the change that was just undone.",
-                    self.can_redo(),
-                    cx,
-                    ClipAction::Redo,
-                ))
                 .child(clip_button(
                     "fmt-paste",
                     "\u{E77F}",
@@ -187,7 +173,7 @@ impl NotesApp {
                         .w(px(1.0))
                         .h(px(RIBBON_ICON))
                         .mx(px(4.0))
-                        .bg(rgb(ONENOTE_BAR_LINE)),
+                        .bg(rgb(onenote_bar_line())),
                 )
                 .child(ribbon_dropdown(
                     "fmt-font-style",
@@ -226,7 +212,7 @@ impl NotesApp {
                         .w(px(1.0))
                         .h(px(RIBBON_ICON))
                         .mx(px(4.0))
-                        .bg(rgb(ONENOTE_BAR_LINE)),
+                        .bg(rgb(onenote_bar_line())),
                 )
                 .child(format_button(
                     "fmt-bold",
@@ -288,7 +274,7 @@ impl NotesApp {
                     "fmt-font-color",
                     "A",
                     shown_font_color,
-                    ONENOTE_INK,
+                    onenote_ink(),
                     true,
                     font_color_open,
                     font_color_popup,

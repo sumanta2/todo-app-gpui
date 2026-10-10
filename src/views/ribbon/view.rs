@@ -4,7 +4,7 @@ use gpui::{div, prelude::*, px, rgb, AnyElement, Context, MouseButton};
 
 use crate::app::NotesApp;
 use crate::constants::{
-        colors::{NOTE_PAGE, ONENOTE_BAR_LINE, ONENOTE_INK_MUTED, ONENOTE_PAGE_SELECTED},
+    colors::{note_page, onenote_bar_line, onenote_ink, onenote_ink_muted, onenote_page_selected},
     typography::{RIBBON_GAP, RIBBON_ICON, RIBBON_PAD_H, RIBBON_PAD_V},
 };
 
@@ -48,18 +48,23 @@ impl NotesApp {
         let zoom_label = self.zoom_percent_label();
         let zoom_body = zoom_option_list(self.canvas_zoom, DropdownFlow::Column, cx);
         let zoom_popup = zoom_open.then(|| dropdown_popup(ZOOM_DROPDOWN_W, DROPDOWN_PAD, zoom_body));
-        let menu = div()
+        let mut menu = div()
             .relative()
             .pr(px(32.0))
-            .bg(rgb(NOTE_PAGE))
-            .border_1()
-            .border_color(rgb(ONENOTE_BAR_LINE))
+            .bg(rgb(note_page()))
+            .border_color(rgb(onenote_bar_line()))
             .flex()
             .flex_col()
             .gap(px(RIBBON_GAP))
             .on_mouse_down(MouseButton::Left, |_, _, cx| {
                 cx.stop_propagation();
-            })
+            });
+        menu = if docked {
+            menu.w_full().border_b_1().border_l_1().border_r_1()
+        } else {
+            menu.border_1()
+        };
+        menu = menu
             .child(
                 div()
                     .flex()
@@ -84,7 +89,7 @@ impl NotesApp {
                             .w(px(1.0))
                             .h(px(RIBBON_ICON))
                             .mx(px(4.0))
-                            .bg(rgb(ONENOTE_BAR_LINE)),
+                            .bg(rgb(onenote_bar_line())),
                     )
                     .child(zoom_step_button(
                         "zoom-100",
@@ -104,7 +109,6 @@ impl NotesApp {
 }
 
 const VIEW_TEXT: f32 = 16.0;
-const VIEW_INK: u32 = 0x4a3f2c;
 /// Home's color button sets that menu's height: 6px padding, a 14px glyph, an 8px gap,
 /// and a 3px bar. View text is 16px, so this padding makes the View row the same height.
 const VIEW_PAD_V: f32 = (RIBBON_PAD_V * 2.0 + 7.0 + RIBBON_GAP + 3.0 - VIEW_TEXT) / 2.0;
@@ -129,9 +133,9 @@ fn zoom_step_button(
         .justify_center()
         .cursor_pointer();
     if active {
-        button = button.bg(rgb(ONENOTE_PAGE_SELECTED));
+        button = button.bg(rgb(onenote_page_selected()));
     } else {
-        button = button.hover(|style| style.bg(rgb(ONENOTE_BAR_LINE)));
+        button = button.hover(|style| style.bg(rgb(onenote_bar_line())));
     }
     button
         .tooltip(move |_window, cx| {
@@ -171,7 +175,7 @@ fn zoom_step_button(
             div()
                 .text_size(px(VIEW_TEXT))
                 .font_weight(gpui::FontWeight::SEMIBOLD)
-                .text_color(rgb(VIEW_INK))
+                .text_color(rgb(onenote_ink()))
                 .child(mark),
         )
         .into_any_element()
@@ -194,12 +198,12 @@ fn zoom_picker(
         .items_center()
         .justify_between()
         .cursor_pointer()
-        .when(open, |this| this.bg(rgb(ONENOTE_PAGE_SELECTED)))
+        .when(open, |this| this.bg(rgb(onenote_page_selected())))
         .hover(|style| {
             if open {
-                style.bg(rgb(ONENOTE_PAGE_SELECTED))
+                style.bg(rgb(onenote_page_selected()))
             } else {
-                style.bg(rgb(ONENOTE_BAR_LINE))
+                style.bg(rgb(onenote_bar_line()))
             }
         })
         .on_mouse_down(
@@ -213,13 +217,13 @@ fn zoom_picker(
         .child(
             div()
                 .text_size(px(VIEW_TEXT))
-                .text_color(rgb(VIEW_INK))
+                .text_color(rgb(onenote_ink()))
                 .child(label),
         )
         .child(
             div()
                 .text_size(px(VIEW_TEXT))
-                .text_color(rgb(ONENOTE_INK_MUTED))
+                .text_color(rgb(onenote_ink_muted()))
                 .child(if open { "▴" } else { "▾" }),
         )
         .children(popup)
@@ -243,7 +247,7 @@ pub(super) fn zoom_option_list(
                 .flex()
                 .items_center()
                 .cursor_pointer()
-                .hover(|style| style.bg(rgb(ONENOTE_BAR_LINE)))
+                .hover(|style| style.bg(rgb(onenote_bar_line())))
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |this, _, _, cx| {
@@ -254,7 +258,7 @@ pub(super) fn zoom_option_list(
                 .child(
                     div()
                         .text_size(px(VIEW_TEXT))
-                        .text_color(rgb(VIEW_INK))
+                        .text_color(rgb(onenote_ink()))
                         .when(chosen, |this| this.font_weight(gpui::FontWeight::SEMIBOLD))
                         .child(label),
                 ),
@@ -277,12 +281,12 @@ fn view_mode_button(
         .flex()
         .items_center()
         .cursor_pointer()
-        .when(active, |this| this.bg(rgb(ONENOTE_PAGE_SELECTED)))
+        .when(active, |this| this.bg(rgb(onenote_page_selected())))
         .hover(|style| {
             if active {
-                style.bg(rgb(ONENOTE_PAGE_SELECTED))
+                style.bg(rgb(onenote_page_selected()))
             } else {
-                style.bg(rgb(ONENOTE_BAR_LINE))
+                style.bg(rgb(onenote_bar_line()))
             }
         })
         .on_mouse_down(
@@ -298,7 +302,7 @@ fn view_mode_button(
         .child(
             div()
                 .text_size(px(VIEW_TEXT))
-                .text_color(rgb(VIEW_INK))
+                .text_color(rgb(onenote_ink()))
                 .child(label),
         )
         .into_any_element()

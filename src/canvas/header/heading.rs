@@ -38,7 +38,7 @@ impl NotesApp {
                     div()
                         .text_size(px(font_size))
                         .whitespace_nowrap()
-                        .text_color(rgb(crate::constants::colors::NOTE_HINT))
+                        .text_color(rgb(crate::constants::colors::note_hint()))
                         .child("Heading..."),
                 )
                 .child(if is_heading_focused {
@@ -49,7 +49,7 @@ impl NotesApp {
                         .w(px(crate::constants::typography::CURSOR_WIDTH))
                         .h(px(font_size))
                         .bg(if self.cursor_visible {
-                            rgb(crate::constants::colors::NOTE_INK)
+                            rgb(crate::constants::colors::cursor())
                         } else {
                             rgba(0x00000000)
                         })
@@ -115,7 +115,7 @@ impl NotesApp {
                 div()
                     .text_size(px(font_size))
                     .whitespace_nowrap()
-                    .text_color(rgb(crate::constants::colors::NOTE_INK))
+                    .text_color(rgb(crate::constants::colors::note_ink()))
                     .child(if text.is_empty() {
                         "\u{00A0}".to_string()
                     } else {
@@ -146,7 +146,7 @@ impl NotesApp {
                                 .w(px(crate::constants::typography::CURSOR_WIDTH))
                                 .h(px(font_size))
                                 .bg(if self.cursor_visible {
-                                    rgb(crate::constants::colors::NOTE_INK)
+                                    rgb(crate::constants::colors::cursor())
                                 } else {
                                     rgba(0x00000000)
                                 })

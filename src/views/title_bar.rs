@@ -1,6 +1,8 @@
 //! Window caption: app name, note search, and minimize, maximize, and close.
 
-use gpui::{div, prelude::*, px, rgb, Context, MouseButton, Window, WindowControlArea};
+use gpui::{
+    div, prelude::*, px, rgb, Context, IntoElement, MouseButton, Render, Window, WindowControlArea,
+};
 
 use crate::app::NotesApp;
 
@@ -23,7 +25,7 @@ impl NotesApp {
             .flex()
             .flex_row()
             .items_center()
-            .bg(rgb(crate::constants::colors::ONENOTE_BAR))
+            .bg(rgb(crate::constants::colors::header_ribbon_bg()))
             .child(history_caption_button(
                 "title-undo",
                 "\u{E7A7}",
@@ -50,7 +52,7 @@ impl NotesApp {
                         div()
                             .text_size(px(14.0))
                             .font_weight(gpui::FontWeight::SEMIBOLD)
-                            .text_color(rgb(crate::constants::colors::ONENOTE_INK))
+                            .text_color(rgb(crate::constants::colors::header_ribbon_text()))
                             .child("Modern Notes"),
                     ),
             )
@@ -63,12 +65,12 @@ impl NotesApp {
                     .rounded(px(4.0))
                     .flex()
                     .items_center()
-                    .bg(rgb(crate::constants::colors::NOTE_PAGE))
+                    .bg(rgb(crate::constants::colors::note_page()))
                     .border_1()
                     .border_color(rgb(if search_focused {
-                        crate::constants::colors::ONENOTE_ACCENT
+                        crate::constants::colors::onenote_accent()
                     } else {
-                        crate::constants::colors::ONENOTE_BAR_LINE
+                        crate::constants::colors::onenote_bar_line()
                     }))
                     .cursor_text()
                     .on_mouse_down(
@@ -83,9 +85,9 @@ impl NotesApp {
                         div()
                             .text_size(px(13.0))
                             .text_color(rgb(if query.is_empty() && !search_focused {
-                                crate::constants::colors::NOTE_HINT
+                                crate::constants::colors::note_hint()
                             } else {
-                                crate::constants::colors::ONENOTE_INK
+                                crate::constants::colors::onenote_ink()
                             }))
                             .child(if query.is_empty() && !search_focused {
                                 "Search notes".to_string()
@@ -126,10 +128,12 @@ fn history_caption_button(
     undo: bool,
 ) -> gpui::AnyElement {
     let ink = if enabled {
-        crate::constants::colors::ONENOTE_INK
+        crate::constants::colors::header_ribbon_text()
     } else {
-        crate::constants::colors::ONENOTE_INK_MUTED
+        crate::constants::colors::header_ribbon_text_muted()
     };
+    let label = if undo { "Undo" } else { "Redo" };
+    let shortcut = if undo { "Ctrl+Z" } else { "Ctrl+Y" };
     let mut button = div()
         .id(id)
         .ml(px(if undo { 8.0 } else { 0.0 }))
@@ -139,6 +143,9 @@ fn history_caption_button(
         .items_center()
         .justify_center()
         .rounded(px(4.0))
+        .tooltip(move |_window, cx| {
+            cx.new(|_| HistoryTooltip { label, shortcut }).into()
+        })
         .child(
             div()
                 .font_family("Segoe MDL2 Assets")
@@ -149,7 +156,7 @@ fn history_caption_button(
     if enabled {
         button = button
             .cursor_pointer()
-            .hover(|style| style.bg(rgb(crate::constants::colors::ONENOTE_BAR_HOVER)))
+            .hover(|style| style.bg(rgb(crate::constants::colors::header_ribbon_bg_hover())))
             .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, _, cx| {
                 if undo {
                     this.undo(cx);
@@ -160,6 +167,25 @@ fn history_caption_button(
             }));
     }
     button.into_any_element()
+}
+
+struct HistoryTooltip {
+    label: &'static str,
+    shortcut: &'static str,
+}
+
+impl Render for HistoryTooltip {
+    fn render(&mut self, _window: &mut Window, _cx: &mut Context<Self>) -> impl IntoElement {
+        div()
+            .px(px(8.0))
+            .py(px(4.0))
+            .bg(rgb(crate::constants::colors::note_page()))
+            .border_1()
+            .border_color(rgb(crate::constants::colors::onenote_bar_line()))
+            .text_size(px(12.0))
+            .text_color(rgb(crate::constants::colors::onenote_ink()))
+            .child(format!("{} ({})", self.label, self.shortcut))
+    }
 }
 
 fn caption_button(
@@ -180,18 +206,14 @@ fn caption_button(
             style.bg(rgb(if close {
                 0xc42b1c
             } else {
-                crate::constants::colors::ONENOTE_BAR_HOVER
+                crate::constants::colors::header_ribbon_bg_hover()
             }))
         })
         .child(
             div()
                 .font_family("Segoe MDL2 Assets")
                 .text_size(px(10.0))
-                .text_color(rgb(if close {
-                    crate::constants::colors::ONENOTE_INK
-                } else {
-                    crate::constants::colors::ONENOTE_INK
-                }))
+                .text_color(rgb(crate::constants::colors::header_ribbon_text()))
                 .hover(|style| {
                     if close {
                         style.text_color(rgb(0xffffff))

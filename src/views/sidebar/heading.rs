@@ -4,7 +4,9 @@ use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, Mou
 
 use crate::app::NotesApp;
 use crate::constants::{
-    colors::SIDEBAR_ITEM_TEXT, layout::NOTE_ITEM_TEXT_OFFSET_X, typography::WEIGHT_SEMIBOLD,
+    colors::{cursor, sidebar_item_text, sidebar_on_selected},
+    layout::NOTE_ITEM_TEXT_OFFSET_X,
+    typography::WEIGHT_SEMIBOLD,
 };
 use crate::models::ActiveField;
 use crate::text::selection::{calculate_line_text_offset_with_font, get_selection_range};
@@ -42,9 +44,9 @@ impl NotesApp {
                         div()
                             .font_family("Lato")
                             .text_color(rgb(if is_selected {
-                                0x000000
+                                sidebar_on_selected()
                             } else {
-                                SIDEBAR_ITEM_TEXT
+                                sidebar_item_text()
                             }))
                             .child("Notebook Name..."),
                     )
@@ -56,7 +58,7 @@ impl NotesApp {
                             .w(px(1.5))
                             .h(px(font_size))
                             .bg(if self.cursor_visible {
-                                rgb(SIDEBAR_ITEM_TEXT)
+                                rgb(cursor())
                             } else {
                                 rgba(0x00000000)
                             })
@@ -94,7 +96,7 @@ impl NotesApp {
                             .child(div().text_color(rgba(0x00000000)).child(before_disp))
                             .child(
                                 div()
-                                    .bg(rgb(crate::constants::colors::NOTE_SELECTION))
+                                    .bg(rgb(crate::constants::colors::note_selection()))
                                     .rounded(px(2.0))
                                     .h(px(font_size + 2.0))
                                     .flex()
@@ -134,7 +136,7 @@ impl NotesApp {
                                     .w(px(1.5))
                                     .h(px(font_size))
                                     .bg(if self.cursor_visible {
-                                        rgb(SIDEBAR_ITEM_TEXT)
+                                        rgb(cursor())
                                     } else {
                                         rgba(0x00000000)
                                     })

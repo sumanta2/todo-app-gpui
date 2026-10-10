@@ -3,7 +3,7 @@
 use gpui::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButton};
 
 use crate::app::NotesApp;
-use crate::constants::colors::NOTE_INK;
+use crate::constants::colors::note_ink;
 use crate::helpers::hash_str;
 use crate::text::selection::calculate_line_text_offset_with_bold_and_font;
 
@@ -131,13 +131,13 @@ impl NotesApp {
             if runs.is_empty() {
                 line_elements.push(
                     div()
-                        .text_color(rgb(NOTE_INK))
+                        .text_color(rgb(note_ink()))
                         .child("\u{00A0}")
                         .into_any_element(),
                 );
             } else {
                 for run in &runs {
-                    let color = NOTE_INK;
+                    let color = note_ink();
                     line_elements.push(crate::canvas::text_editor::styled_run_element(
                         run,
                         color,
@@ -241,7 +241,7 @@ impl NotesApp {
         }
         block
             .text_size(px(self.scaled(self.canvas_body_font_size)))
-            .text_color(rgb(NOTE_INK))
+            .text_color(rgb(note_ink()))
             .cursor_text()
             .on_mouse_down(
                 MouseButton::Left,

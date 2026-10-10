@@ -218,7 +218,7 @@ impl NotesApp {
             .id("note-viewer-canvas")
             .flex_1()
             .relative()
-            .bg(rgb(crate::constants::colors::NOTE_PAGE))
+            .bg(rgb(crate::constants::colors::note_page()))
             .overflow_hidden()
             .cursor_default()
             .on_scroll_wheel(cx.listener(|this, event: &gpui::ScrollWheelEvent, _, cx| {
@@ -305,7 +305,7 @@ impl NotesApp {
                                 .text_size(px(self.scaled(self.page_heading_font_size)))
                                 .whitespace_nowrap()
                                 .font_weight(gpui::FontWeight::BOLD)
-                                .text_color(rgb(crate::constants::colors::NOTE_INK))
+                                .text_color(rgb(crate::constants::colors::note_ink()))
                                 .child(page_name.clone())
                                 .into_any_element(),
                             &page_name,
@@ -327,20 +327,20 @@ impl NotesApp {
                     .font_family("Calibri")
                     .text_size(px(self.section_name_font_size))
                     .bg(if is_active {
-                        rgb(crate::constants::colors::ONENOTE_PAGE_SELECTED)
+                        rgb(crate::constants::colors::onenote_page_selected())
                     } else {
-                        rgb(crate::constants::colors::ONENOTE_TAB_IDLE)
+                        rgb(crate::constants::colors::onenote_tab_idle())
                     });
                 tab_el = tab_el.border_t_2().border_color(if is_active {
-                    rgb(crate::constants::colors::ONENOTE_ACCENT)
+                    rgb(crate::constants::colors::onenote_accent())
                 } else {
-                    rgb(crate::constants::colors::ONENOTE_TAB_IDLE)
+                    rgb(crate::constants::colors::onenote_tab_idle())
                 });
                 tab_el = tab_el
                     .text_color(if is_active {
-                        rgb(crate::constants::colors::ONENOTE_INK)
+                        rgb(crate::constants::colors::onenote_ink())
                     } else {
-                        rgb(crate::constants::colors::ONENOTE_INK_MUTED)
+                        rgb(crate::constants::colors::onenote_ink_muted())
                     })
                     .font_weight(if is_active {
                         gpui::FontWeight::BOLD
@@ -352,7 +352,7 @@ impl NotesApp {
                         if is_active {
                             style
                         } else {
-                            style.bg(rgb(crate::constants::colors::ONENOTE_TAB_HOVER))
+                            style.bg(rgb(crate::constants::colors::onenote_tab_hover()))
                         }
                     })
                     .on_click(cx.listener(move |this, _, _, cx| {
@@ -407,7 +407,7 @@ impl NotesApp {
             .flex_col()
             .flex_1()
             .h_full()
-            .bg(rgb(crate::constants::colors::ONENOTE_BAR))
+            .bg(rgb(crate::constants::colors::onenote_bar()))
             .gap(px(0.0));
         if !self.full_page_view {
             page = page.child(section_tabs);

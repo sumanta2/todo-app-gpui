@@ -79,8 +79,8 @@ impl Render for NotesApp {
             .flex()
             .flex_col()
             .size_full()
-            .bg(rgb(crate::constants::colors::ONENOTE_BAR))
-            .text_color(rgb(crate::constants::colors::ONENOTE_INK))
+            .bg(rgb(crate::constants::colors::onenote_bar()))
+            .text_color(rgb(crate::constants::colors::onenote_ink()))
             .font_family(self.font_family.as_str())
             .child(title_bar)
             .child(

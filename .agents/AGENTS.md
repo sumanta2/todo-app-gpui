@@ -32,6 +32,7 @@ todo-app-gpui/
 │   │   ├── formatting.rs         # Character styles and font settings
 │   │   ├── keyboard.rs           # Key routing into the active field
 │   │   ├── storage.rs            # notes.json and encrypted image files
+│   │   ├── metadata.rs           # Pinned left bar and ribbon, saved beside notes.json
 │   │   └── history/              # Undo and redo. See UNDO_REDO.md before changing content
 │   │       ├── mod.rs            # Stacks, record_edit, undo, and redo
 │   │       ├── kind.rs           # EditKind and which edits merge

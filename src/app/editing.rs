@@ -17,6 +17,8 @@ impl NotesApp {
         // this below "load_note" function present at src\app\storage.rs filed
         let notes = Self::load_notes().unwrap_or_default();
         let selected_note_id = notes.first().map(|n| n.id.clone());
+        let layout = crate::app::metadata::AppMetadata::load();
+        crate::constants::colors::install(layout.colors.clone());
 
         let mut app = Self {
             notes,
@@ -95,7 +97,7 @@ impl NotesApp {
             edit_section_name_anchor: None,
             is_selecting_section_name: false,
             active_section_tab_x: 0.0,
-            is_sidebar_open: true,
+            is_sidebar_open: layout.sidebar_pinned,
             title_search: String::new(),
             title_search_focused: false,
             note_menu_open: false,
@@ -113,8 +115,8 @@ impl NotesApp {
             typing_font_size_px: crate::constants::typography::CANVAS_BODY_FONT_SIZE,
             font_color_menu_open: false,
             bg_color_menu_open: false,
-            ribbon_pinned: false,
-            ribbon_pane: super::RibbonPane::Home,
+            ribbon_pinned: layout.ribbon_pinned,
+            ribbon_pane: layout.ribbon_pane,
             typing_font_color: 0,
             typing_bg_color: 0,
             font_color_pinned: false,

@@ -90,9 +90,9 @@ impl NotesApp {
                     let mut inner_block = div().flex().flex_col().w(px(self.scaled(textbox_width)));
                     if show_chrome {
                         inner_block = inner_block
-                            .bg(rgb(crate::constants::colors::NOTE_PAGE))
+                            .bg(rgb(crate::constants::colors::note_page()))
                             .border_1()
-                            .border_color(rgb(crate::constants::colors::NOTE_CHROME_BORDER))
+                            .border_color(rgb(crate::constants::colors::note_chrome_border()))
                             .overflow_hidden();
                     }
 
@@ -100,7 +100,7 @@ impl NotesApp {
                     let header = div()
                         .id(("drag-header", id_num))
                         .h(px(12.0))
-                        .bg(rgb(crate::constants::colors::NOTE_CHROME_BAR))
+                        .bg(rgb(crate::constants::colors::note_chrome_bar()))
                         .cursor_move()
                         .on_mouse_down(
                             MouseButton::Left,
@@ -340,9 +340,9 @@ impl NotesApp {
                     let mut inner_block = div().flex().flex_col().w(px(self.scaled(textbox_width)));
                     if show_chrome {
                         inner_block = inner_block
-                            .bg(rgb(crate::constants::colors::NOTE_PAGE))
+                            .bg(rgb(crate::constants::colors::note_page()))
                             .border_1()
-                            .border_color(rgb(crate::constants::colors::NOTE_CHROME_BORDER));
+                            .border_color(rgb(crate::constants::colors::note_chrome_border()));
                         if !image_frame_open {
                             inner_block = inner_block.overflow_hidden();
                         }
@@ -352,7 +352,7 @@ impl NotesApp {
                     let header = div()
                         .id(("drag-header", id_num))
                         .h(px(12.0))
-                        .bg(rgb(crate::constants::colors::NOTE_CHROME_BAR))
+                        .bg(rgb(crate::constants::colors::note_chrome_bar()))
                         .cursor_move()
                         .on_mouse_down(
                             MouseButton::Left,

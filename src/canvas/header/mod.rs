@@ -42,20 +42,20 @@ impl NotesApp {
                 .font_family("Calibri")
                 .text_size(px(self.section_name_font_size))
                 .bg(if is_active {
-                    rgb(crate::constants::colors::ONENOTE_PAGE_SELECTED)
+                    rgb(crate::constants::colors::onenote_page_selected())
                 } else {
-                    rgb(crate::constants::colors::ONENOTE_TAB_IDLE)
+                    rgb(crate::constants::colors::onenote_tab_idle())
                 });
             tab_el = tab_el.border_t_2().border_color(if is_active {
-                rgb(crate::constants::colors::ONENOTE_ACCENT)
+                rgb(crate::constants::colors::onenote_accent())
             } else {
-                rgb(crate::constants::colors::ONENOTE_TAB_IDLE)
+                rgb(crate::constants::colors::onenote_tab_idle())
             });
             tab_el = tab_el
                 .text_color(if is_active {
-                    rgb(crate::constants::colors::ONENOTE_INK)
+                    rgb(crate::constants::colors::onenote_ink())
                 } else {
-                    rgb(crate::constants::colors::ONENOTE_INK_MUTED)
+                    rgb(crate::constants::colors::onenote_ink_muted())
                 })
                 .font_weight(if is_active {
                     gpui::FontWeight::BOLD
@@ -67,7 +67,7 @@ impl NotesApp {
             } else {
                 tab_el
                     .cursor_pointer()
-                    .hover(|style| style.bg(rgb(crate::constants::colors::ONENOTE_TAB_HOVER)))
+                    .hover(|style| style.bg(rgb(crate::constants::colors::onenote_tab_hover())))
             };
             tab_el = tab_el
                 .on_click(cx.listener(move |this, _, _, cx| {
@@ -138,8 +138,8 @@ impl NotesApp {
                 .py(px(4.0))
                 .font_family("Calibri")
                 .text_size(px(self.section_name_font_size + 3.0))
-                .bg(rgb(crate::constants::colors::ONENOTE_TAB_IDLE))
-                .hover(|s| s.bg(rgb(crate::constants::colors::ONENOTE_TAB_HOVER)))
+                .bg(rgb(crate::constants::colors::onenote_tab_idle()))
+                .hover(|s| s.bg(rgb(crate::constants::colors::onenote_tab_hover())))
                 .text_color(rgb(0x8a805a))
                 .cursor_pointer()
                 .on_click(cx.listener(|this, _, _, cx| {

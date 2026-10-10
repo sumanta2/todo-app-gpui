@@ -10,7 +10,7 @@ use gpui::{
 };
 
 use crate::app::{NotesApp, RibbonPane};
-use crate::constants::colors::{NOTE_PAGE, ONENOTE_BAR_LINE, ONENOTE_INK};
+use crate::constants::colors::{note_page, onenote_bar_line, onenote_ink};
 
 /// Gap kept between the popup and the window edges when it would overflow.
 const WINDOW_MARGIN: f32 = 8.0;
@@ -49,7 +49,7 @@ pub(super) fn menu_pin_button(
         .items_center()
         .justify_center()
         .rounded(px(4.0))
-        .hover(|style| style.bg(rgb(ONENOTE_BAR_LINE)))
+        .hover(|style| style.bg(rgb(onenote_bar_line())))
         .on_mouse_down(
             MouseButton::Left,
             cx.listener(move |this, _, _, cx| {
@@ -66,6 +66,7 @@ pub(super) fn menu_pin_button(
                     this.font_color_menu_open = false;
                     this.bg_color_menu_open = false;
                 }
+                this.save_layout();
                 cx.notify();
                 cx.stop_propagation();
             }),
@@ -74,7 +75,7 @@ pub(super) fn menu_pin_button(
             div()
                 .font_family("Segoe MDL2 Assets")
                 .text_size(px(14.0))
-                .text_color(rgb(ONENOTE_INK))
+                .text_color(rgb(onenote_ink()))
                 .child(if pinned { "\u{E196}" } else { "\u{E718}" }),
         )
         .into_any_element()
@@ -106,9 +107,9 @@ pub(super) fn dropdown_popup(width: f32, padding: f32, content: AnyElement) -> A
                             .occlude()
                             .w(px(width))
                             .py(px(padding))
-                            .bg(rgb(NOTE_PAGE))
+                            .bg(rgb(note_page()))
                             .border_1()
-                            .border_color(rgb(ONENOTE_BAR_LINE))
+                            .border_color(rgb(onenote_bar_line()))
                             .shadow_md()
                             .flex()
                             .flex_col()

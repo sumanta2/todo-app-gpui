@@ -2,7 +2,7 @@
 
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement};
 
-use crate::constants::colors::{NOTE_HINT, NOTE_INK};
+use crate::constants::colors::{cursor, note_hint, note_ink};
 use crate::constants::typography::CURSOR_WIDTH;
 
 #[derive(Clone)]
@@ -67,7 +67,7 @@ impl TextEditor {
                         .w(px(CURSOR_WIDTH))
                         .h(px(cursor_height))
                         .bg(if self.cursor_visible {
-                            rgb(NOTE_INK)
+                            rgb(cursor())
                         } else {
                             rgba(0x00000000)
                         })
@@ -76,7 +76,7 @@ impl TextEditor {
                 })
                 .child(
                     div()
-                        .text_color(rgb(NOTE_HINT))
+                        .text_color(rgb(note_hint()))
                         .text_size(px(font_size))
                         .child("Type note..."),
                 );
@@ -158,7 +158,7 @@ impl TextEditor {
             if runs.is_empty() {
                 line_elements.push(
                     div()
-                        .text_color(rgb(NOTE_INK))
+                        .text_color(rgb(note_ink()))
                         .text_size(px(font_size))
                         .line_height(px(line_height))
                         .child("\u{00A0}")
@@ -166,7 +166,7 @@ impl TextEditor {
                 );
             } else {
                 for run in &runs {
-                    let color = NOTE_INK;
+                    let color = note_ink();
                     line_elements.push(styled_run_element(run, color, true, self.zoom));
                 }
             }

@@ -87,7 +87,8 @@ pub struct NotesApp {
     /// Parsed notebook for the open note in view mode, so each frame does not re-read JSON.
     pub(crate) view_content: Option<NoteContent>,
     /// Parsed canvas items for the page currently on screen, keyed by page id.
-    pub(crate) page_items_cache: Option<(String, Vec<crate::models::CanvasItem>)>,
+    /// Shared so each viewer frame can reuse the parse without copying the page.
+    pub(crate) page_items_cache: Option<(String, std::sync::Arc<Vec<crate::models::CanvasItem>>)>,
     /// Decrypted images, keyed by path. The first frame skips this and fills it afterward.
     pub(crate) image_cache: std::collections::HashMap<String, std::sync::Arc<gpui::Image>>,
     /// While true, the opening frame draws text only. Images load on the following frame.

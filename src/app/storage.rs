@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::app::NotesApp;
-use crate::helpers::encrypt_decrypt;
+use crate::helpers::encrypt_decrypt_in_place;
 use crate::models::{ActiveField, CanvasItem, ContentBlock, ImageItem, MixedItem, Note};
 use crate::text::styles::split_text_and_bold_at;
 
@@ -101,14 +101,15 @@ impl NotesApp {
             // Scramble bytes using XOR cipher before writing to disk.
             // The selected note ID is part of the key so each note has its own encryption scope.
             let key = format!("notes-security-key-{}", selected_id).into_bytes();
-            let encrypted_bytes = encrypt_decrypt(&img.bytes, &key);
+            let mut encrypted_bytes = img.bytes.clone();
+            encrypt_decrypt_in_place(&mut encrypted_bytes, &key);
 
             if fs::write(&path, &encrypted_bytes).is_ok() {
                 if let Some(path_str) = path.to_str() {
                     let path_str = path_str.to_owned();
                     self.edit_images.push(path_str.clone());
 
-                    let inserted_inline = self.insert_image_into_active_text(path_str.clone());
+                    let inserted_inline = self.insert_image_into_active_text(&path_str);
                     if !inserted_inline {
                         let new_id = chrono::Local::now().timestamp_millis().to_string();
                         let new_image_item = ImageItem {
@@ -135,11 +136,17 @@ impl NotesApp {
     ///
     /// Returns `false` when there is no active text block to insert into (for example, when
     /// nothing is focused), in which case the caller should fall back to a standalone image box.
-    fn insert_image_into_active_text(&mut self, image_path: String) -> bool {
+    fn insert_image_into_active_text(&mut self, image_path: &str) -> bool {
         if self.active_field != ActiveField::Body {
             return false;
         }
-        let Some(active_id) = self.active_text_block_id.clone() else {
+        let Some(item_index) = self.active_text_block_id.as_deref().and_then(|active_id| {
+            self.edit_canvas_items.iter().position(|item| match item {
+                CanvasItem::Text(text) => text.id == active_id,
+                CanvasItem::Mixed(mixed) => mixed.id == active_id,
+                CanvasItem::Image(_) => false,
+            })
+        }) else {
             return false;
         };
 
@@ -187,7 +194,7 @@ impl NotesApp {
             });
         }
         replacement.push(ContentBlock::Image {
-            path: image_path,
+            path: image_path.to_owned(),
             width: 240.0,
             height: 180.0,
             offset_x: 0.0,
@@ -203,18 +210,12 @@ impl NotesApp {
             line_layouts: after_layouts.clone(),
         });
 
-        let Some(item) = self.edit_canvas_items.iter_mut().find(|i| match i {
-            CanvasItem::Text(t) => t.id == active_id,
-            CanvasItem::Mixed(m) => m.id == active_id,
-            CanvasItem::Image(_) => false,
-        }) else {
-            return false;
-        };
+        let item = &mut self.edit_canvas_items[item_index];
 
         let new_active_block_index = match item {
             CanvasItem::Text(t) => {
                 let mixed = MixedItem {
-                    id: t.id.clone(),
+                    id: std::mem::take(&mut t.id),
                     x: t.x,
                     y: t.y,
                     width: t.width,
@@ -254,7 +255,14 @@ impl NotesApp {
         if self.defer_images {
             return;
         }
-        self.prefetch_image_paths(&image_paths(items));
+        for path in image_path_refs(items) {
+            if self.image_cache.contains_key(path) {
+                continue;
+            }
+            if let Some(image) = self.decrypt_image(path) {
+                self.image_cache.insert(path.to_owned(), Arc::new(image));
+            }
+        }
     }
 
     pub(crate) fn prefetch_image_paths(&mut self, paths: &[String]) {
@@ -288,9 +296,10 @@ impl NotesApp {
     pub(crate) fn decrypt_image(&self, path_str: &str) -> Option<gpui::Image> {
         let path = PathBuf::from(path_str);
         if let Some(ref selected_id) = self.selected_note_id {
-            if let Ok(encrypted_bytes) = fs::read(&path) {
+            if let Ok(mut encrypted_bytes) = fs::read(&path) {
                 let key = format!("notes-security-key-{}", selected_id).into_bytes();
-                let decrypted_bytes = encrypt_decrypt(&encrypted_bytes, &key);
+                encrypt_decrypt_in_place(&mut encrypted_bytes, &key);
+                let decrypted_bytes = encrypted_bytes;
 
                 let ext = path.extension()?.to_str()?.to_lowercase();
                 let format = match ext.as_str() {
@@ -323,15 +332,15 @@ fn split_u32(values: &[u32], cursor: usize) -> (Vec<u32>, Vec<u32>) {
     (values[..idx].to_vec(), values[idx..].to_vec())
 }
 
-fn image_paths(items: &[CanvasItem]) -> Vec<String> {
+fn image_path_refs(items: &[CanvasItem]) -> Vec<&str> {
     let mut paths = Vec::new();
     for item in items {
         match item {
-            CanvasItem::Image(image) => paths.push(image.path.clone()),
+            CanvasItem::Image(image) => paths.push(image.path.as_str()),
             CanvasItem::Mixed(mixed) => {
                 for block in &mixed.blocks {
                     if let ContentBlock::Image { path, .. } = block {
-                        paths.push(path.clone());
+                        paths.push(path.as_str());
                     }
                 }
             }

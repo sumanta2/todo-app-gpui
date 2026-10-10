@@ -249,18 +249,13 @@ impl NotesApp {
             cache.stamp == stamp && cache.font_size == size && (cache.zoom - zoom).abs() < 0.001
         });
         if !fresh {
-            let text = self.edit_body.clone();
-            let bold = self.edit_body_bold.clone();
-            let italic = self.edit_body_italic.clone();
-            let families = self.edit_body_font_family.clone();
-            let sizes = self.edit_body_font_size.clone();
             self.body_hit_cache = Some(crate::text::selection::build_text_hit_cache(
                 window,
-                &text,
-                &bold,
-                &italic,
-                &families,
-                &sizes,
+                &self.edit_body,
+                &self.edit_body_bold,
+                &self.edit_body_italic,
+                &self.edit_body_font_family,
+                &self.edit_body_font_size,
                 size,
                 zoom,
                 stamp,
@@ -554,8 +549,8 @@ impl NotesApp {
             5.0,
             self.canvas_zoom,
         );
-        let segment_id = self.viewer_hit_cache_id.clone().unwrap_or_default();
-        self.viewer_index_at_local(&segment_id, rel_x, rel_y)
+        let segment_id = self.viewer_hit_cache_id.as_deref().unwrap_or("");
+        self.viewer_index_at_local(segment_id, rel_x, rel_y)
     }
 
     fn viewer_index_at_local(&self, segment_id: &str, rel_x: f32, rel_y: f32) -> usize {
@@ -585,10 +580,9 @@ impl NotesApp {
         line_idx: usize,
         text_advance: f32,
     ) -> f32 {
-        let Some((box_width, layouts)) = self.viewer_segment_align(segment_id) else {
+        let Some((box_width, layout)) = self.viewer_segment_align(segment_id, line_idx) else {
             return 0.0;
         };
-        let layout = layouts.get(line_idx).copied().unwrap_or_default();
         let zoom = self.canvas_zoom.max(0.25);
         // The viewer block width is already in screen pixels, with 5px of padding on each side.
         let content = (box_width - 10.0).max(0.0) / zoom;
@@ -598,28 +592,31 @@ impl NotesApp {
     fn viewer_segment_align(
         &self,
         segment_id: &str,
-    ) -> Option<(f32, Vec<crate::models::LineLayout>)> {
+        line_idx: usize,
+    ) -> Option<(f32, crate::models::LineLayout)> {
         let items = &self.page_items_cache.as_ref()?.1;
         if let Some((mixed_id, index)) = segment_id.rsplit_once("::") {
             if let Ok(index) = index.parse::<usize>() {
-                for item in items {
+                for item in items.iter() {
                     if let crate::models::CanvasItem::Mixed(mixed) = item {
                         if mixed.id == mixed_id {
                             if let Some(crate::models::ContentBlock::Text {
                                 line_layouts, ..
                             }) = mixed.blocks.get(index)
                             {
-                                return Some((mixed.width.unwrap_or(250.0), line_layouts.clone()));
+                                let layout = line_layouts.get(line_idx).copied().unwrap_or_default();
+                                return Some((mixed.width.unwrap_or(250.0), layout));
                             }
                         }
                     }
                 }
             }
         }
-        for item in items {
+        for item in items.iter() {
             if let crate::models::CanvasItem::Text(text) = item {
                 if text.id == segment_id {
-                    return Some((text.width.unwrap_or(250.0), text.line_layouts.clone()));
+                    let layout = text.line_layouts.get(line_idx).copied().unwrap_or_default();
+                    return Some((text.width.unwrap_or(250.0), layout));
                 }
             }
         }

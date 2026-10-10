@@ -21,14 +21,15 @@ pub(crate) fn replace_range(s: &mut String, start: usize, end: usize, replace_wi
     }
 }
 
-/// XOR-encrypts and decrypts byte slices using a repeating key.
+/// XOR-encrypts or decrypts `bytes` in place with a repeating key.
 ///
-/// The app uses this helper to store image data with a lightweight obfuscation layer
-/// before writing it to disk.
-pub(crate) fn encrypt_decrypt(bytes: &[u8], key: &[u8]) -> Vec<u8> {
-    bytes
-        .iter()
-        .enumerate()
-        .map(|(i, &b)| b ^ key[i % key.len()])
-        .collect()
+/// The same call encrypts and decrypts. Working in the existing buffer avoids a second
+/// full-size copy of each image.
+pub(crate) fn encrypt_decrypt_in_place(bytes: &mut [u8], key: &[u8]) {
+    if key.is_empty() {
+        return;
+    }
+    for (i, byte) in bytes.iter_mut().enumerate() {
+        *byte ^= key[i % key.len()];
+    }
 }

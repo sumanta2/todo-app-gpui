@@ -1,5 +1,7 @@
 //! Read-only canvas for the page that is currently open.
 
+use std::sync::Arc;
+
 use gpui::{div, img, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButton, Window};
 
 use crate::app::NotesApp;
@@ -10,14 +12,14 @@ use crate::models::{load_canvas_items, CanvasItem, ContentBlock, NoteContent};
 
 impl NotesApp {
     /// Parses a page body once, then reuses that result until the page changes.
-    fn cached_page_items(&mut self, page_id: &str, body: &str) -> Vec<CanvasItem> {
+    fn cached_page_items(&mut self, page_id: &str, body: &str) -> Arc<Vec<CanvasItem>> {
         if let Some((cached_id, items)) = &self.page_items_cache {
             if cached_id == page_id {
-                return items.clone();
+                return Arc::clone(items);
             }
         }
-        let items = load_canvas_items(body);
-        self.page_items_cache = Some((page_id.to_string(), items.clone()));
+        let items = Arc::new(load_canvas_items(body));
+        self.page_items_cache = Some((page_id.to_string(), Arc::clone(&items)));
         items
     }
 
@@ -34,24 +36,23 @@ impl NotesApp {
     ) -> impl IntoElement {
         let mut viewer_elements = Vec::new();
 
-        let open_page = {
+        let active_page_items = {
             let sec_id = self.active_section_id.as_deref();
             let page_id = self.active_page_id.as_deref();
-            sec_id
+            let page = sec_id
                 .and_then(|sec_id| content.sections.iter().find(|section| section.id == sec_id))
                 .and_then(|section| {
                     page_id.and_then(|page_id| section.pages.iter().find(|page| page.id == page_id))
-                })
-                .map(|page| (page.id.clone(), page.body.clone()))
-        };
-        let active_page_items = if let Some((page_id, body)) = open_page {
-            self.cached_page_items(&page_id, &body)
-        } else {
-            Vec::new()
+                });
+            if let Some(page) = page {
+                self.cached_page_items(&page.id, &page.body)
+            } else {
+                Arc::new(Vec::new())
+            }
         };
         self.prefetch_canvas_images(&active_page_items);
 
-        for item in &active_page_items {
+        for item in active_page_items.iter() {
             match item {
                 //  RENDER CANVAS-ITEM TEXT FOR VIEW =========================================================================
                 CanvasItem::Text(t) => {

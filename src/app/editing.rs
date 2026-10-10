@@ -267,10 +267,12 @@ impl NotesApp {
                 let sidebar_w = self.layout_sidebar_w();
                 let page_sidebar_w = self.layout_page_sidebar_w();
                 let edit_body = self.edit_body.clone();
-                let edit_body_bold = self.edit_body_bold.clone();
-                let edit_body_italic = self.edit_body_italic.clone();
-                let edit_body_underline = self.edit_body_underline.clone();
-                let edit_body_strike = self.edit_body_strike.clone();
+                let body_bold_spans = crate::text::styles::bool_vec_to_spans(&self.edit_body_bold);
+                let body_italic_spans =
+                    crate::text::styles::bool_vec_to_spans(&self.edit_body_italic);
+                let body_underline_spans =
+                    crate::text::styles::bool_vec_to_spans(&self.edit_body_underline);
+                let body_strike_spans = crate::text::styles::bool_vec_to_spans(&self.edit_body_strike);
                 let line_layouts =
                     crate::app::paragraph::saved_line_layouts(&self.edit_body_line_layouts);
                 let font_runs = crate::text::styles::font_vecs_to_runs(
@@ -293,15 +295,12 @@ impl NotesApp {
                     match item {
                         CanvasItem::Text(t) => {
                             t.text = edit_body;
-                            t.bold_spans = crate::text::styles::bool_vec_to_spans(&edit_body_bold);
-                            t.italic_spans =
-                                crate::text::styles::bool_vec_to_spans(&edit_body_italic);
-                            t.underline_spans =
-                                crate::text::styles::bool_vec_to_spans(&edit_body_underline);
-                            t.strike_spans =
-                                crate::text::styles::bool_vec_to_spans(&edit_body_strike);
-                            t.font_runs = font_runs.clone();
-                            t.line_layouts = line_layouts.clone();
+                            t.bold_spans = body_bold_spans;
+                            t.italic_spans = body_italic_spans;
+                            t.underline_spans = body_underline_spans;
+                            t.strike_spans = body_strike_spans;
+                            t.font_runs = font_runs;
+                            t.line_layouts = line_layouts;
 
                             let base_w = t.width.unwrap_or(250.0);
                             let desired_w = needed_width.max(base_w).max(250.0);
@@ -322,17 +321,12 @@ impl NotesApp {
                                 }) = m.blocks.get_mut(idx)
                                 {
                                     *text = edit_body;
-                                    *bold_spans =
-                                        crate::text::styles::bool_vec_to_spans(&edit_body_bold);
-                                    *italic_spans =
-                                        crate::text::styles::bool_vec_to_spans(&edit_body_italic);
-                                    *underline_spans = crate::text::styles::bool_vec_to_spans(
-                                        &edit_body_underline,
-                                    );
-                                    *strike_spans =
-                                        crate::text::styles::bool_vec_to_spans(&edit_body_strike);
-                                    *block_font_runs = font_runs.clone();
-                                    *block_line_layouts = line_layouts.clone();
+                                    *bold_spans = body_bold_spans;
+                                    *italic_spans = body_italic_spans;
+                                    *underline_spans = body_underline_spans;
+                                    *strike_spans = body_strike_spans;
+                                    *block_font_runs = font_runs;
+                                    *block_line_layouts = line_layouts;
                                 }
                             }
 

@@ -223,10 +223,16 @@ pub struct NotesApp {
     pub(crate) is_sidebar_open: bool,
     /// Text typed into the title-bar search box. Filters the notebook list.
     pub(crate) title_search: String,
-    /// When true, keystrokes go to the title-bar search box.
-    pub(crate) title_search_focused: bool,
     /// When the left bar is unpinned, this opens the note list before the section tabs.
     pub(crate) note_menu_open: bool,
+    /// Click position of the section-name menu. `None` means the menu is closed.
+    pub(crate) section_menu_at: Option<(f32, f32)>,
+    /// Click position of the page-name menu. `None` means the menu is closed.
+    pub(crate) page_menu_at: Option<(f32, f32)>,
+    /// The section tab is showing its text editor after Rename.
+    pub(crate) section_renaming: bool,
+    /// The page title is showing its text editor after Rename.
+    pub(crate) page_renaming: bool,
     /// Width of the pages list on the right of the canvas. Dragging its left edge changes this.
     pub(crate) page_sidebar_width: f32,
     pub(crate) page_sidebar_resizing: bool,

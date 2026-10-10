@@ -5,6 +5,7 @@ use gpui::{
 };
 
 use crate::app::NotesApp;
+use crate::models::ActiveField;
 
 impl NotesApp {
     pub(crate) fn render_title_bar(
@@ -14,7 +15,7 @@ impl NotesApp {
     ) -> gpui::AnyElement {
         let maximized = window.is_maximized();
         let query = self.title_search.clone();
-        let search_focused = self.title_search_focused;
+        let search_active = self.active_field == ActiveField::Search;
         let can_undo = self.can_undo();
         let can_redo = self.can_redo();
         div()
@@ -67,7 +68,7 @@ impl NotesApp {
                     .items_center()
                     .bg(rgb(crate::constants::colors::note_page()))
                     .border_1()
-                    .border_color(rgb(if search_focused {
+                    .border_color(rgb(if search_active {
                         crate::constants::colors::onenote_accent()
                     } else {
                         crate::constants::colors::onenote_bar_line()
@@ -76,7 +77,8 @@ impl NotesApp {
                     .on_mouse_down(
                         gpui::MouseButton::Left,
                         cx.listener(|this, _, _, cx| {
-                            this.title_search_focused = true;
+                            this.active_field = ActiveField::Search;
+                            this.cursor_visible = true;
                             cx.notify();
                             cx.stop_propagation();
                         }),
@@ -87,17 +89,17 @@ impl NotesApp {
                             .flex_row()
                             .items_center()
                             .text_size(px(13.0))
-                            .text_color(rgb(if query.is_empty() && !search_focused {
+                            .text_color(rgb(if query.is_empty() && !search_active {
                                 crate::constants::colors::note_hint()
                             } else {
                                 crate::constants::colors::onenote_ink()
                             }))
-                            .child(if query.is_empty() && !search_focused {
+                            .child(if query.is_empty() && !search_active {
                                 "Search notes".to_string()
                             } else {
                                 query
                             })
-                            .when(search_focused, |this| {
+                            .when(search_active && self.cursor_visible, |this| {
                                 this.child(
                                     div()
                                         .w(px(crate::constants::typography::CURSOR_WIDTH))

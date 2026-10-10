@@ -300,7 +300,20 @@ impl NotesApp {
             div()
                 .absolute()
                 .top(px(self.place_y(HEADING_PADDING_TOP)))
-                .left(px(self.place_x(HEADING_PADDING_LEFT)))
+                .left(px(
+                    self.place_x(HEADING_PADDING_LEFT)
+                        - crate::constants::layout::HEADING_HIT_EXTEND,
+                ))
+                .pl(px(crate::constants::layout::HEADING_HIT_EXTEND))
+                .pr(px(crate::constants::layout::HEADING_HIT_EXTEND))
+                .cursor_text()
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
+                        this.begin_page_rename_at(window, event.position.x.as_f32(), cx);
+                        cx.stop_propagation();
+                    }),
+                )
                 .child(heading_content),
         );
         canvas_container = canvas_container.child(self.render_canvas_view_toggle(cx));

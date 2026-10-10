@@ -475,6 +475,9 @@ pub(crate) mod layout {
     /// Initial canvas top edge in window coordinates; replaced by the measured value after the first paint.
     pub(crate) const INITIAL_CANVAS_TOP_Y: f32 = 78.0;
 
+    /// Extra click area on each side of the page title. A click here still edits the page name.
+    pub(crate) const HEADING_HIT_EXTEND: f32 = 60.0;
+
     /// Left inset of the page title drawn at the top of the canvas.
     pub(crate) const HEADING_PADDING_LEFT: f32 = 16.0;
 

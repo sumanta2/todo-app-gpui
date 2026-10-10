@@ -93,8 +93,17 @@ impl Render for NotesApp {
                     .on_mouse_down(
                         gpui::MouseButton::Left,
                         cx.listener(|this, _, _, cx| {
-                            if this.title_search_focused {
-                                this.title_search_focused = false;
+                            let mut changed = false;
+                            if this.active_field == crate::models::ActiveField::Search {
+                                this.active_field = crate::models::ActiveField::Heading;
+                                changed = true;
+                            }
+                            if this.section_menu_at.is_some() || this.page_menu_at.is_some() {
+                                this.section_menu_at = None;
+                                this.page_menu_at = None;
+                                changed = true;
+                            }
+                            if changed {
                                 cx.notify();
                             }
                         }),
@@ -113,7 +122,8 @@ impl Render for NotesApp {
                     )
                     .children(home_menus)
                     .children(view_menus)
-                    .children(note_menus),
+                    .children(note_menus)
+                    .children(self.render_name_action_menus(cx)),
             )
     }
 }

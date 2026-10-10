@@ -73,9 +73,9 @@ impl NotesApp {
             return;
         }
 
-        if self.title_search_focused && !control {
+        if self.active_field == ActiveField::Search && !control {
             if key.eq_ignore_ascii_case("escape") {
-                self.title_search_focused = false;
+                self.active_field = ActiveField::Heading;
                 cx.notify();
                 return;
             }
@@ -102,6 +102,19 @@ impl NotesApp {
 
         // Shortcut: Escape closes the Home menu or clears the current selection.
         if key.eq_ignore_ascii_case("escape") {
+            if self.section_menu_at.is_some() || self.page_menu_at.is_some() {
+                self.section_menu_at = None;
+                self.page_menu_at = None;
+                cx.notify();
+                return;
+            }
+            if self.section_renaming || self.page_renaming {
+                self.section_renaming = false;
+                self.page_renaming = false;
+                self.sync_current_page_state();
+                cx.notify();
+                return;
+            }
             if self.home_menu_open
                 || self.view_menu_open
                 || self.note_menu_open
@@ -250,6 +263,9 @@ impl NotesApp {
                     self.sync_active_text_block();
                     self.active_field = ActiveField::NoteHeading;
                 }
+                ActiveField::Search => {
+                    self.active_field = ActiveField::NoteHeading;
+                }
             }
             cx.notify();
             return;
@@ -313,6 +329,7 @@ impl NotesApp {
                 &mut self.is_selecting_body,
                 true,
             ),
+            ActiveField::Search => return,
         };
         let typing_family = self.typing_font_family;
         let typing_size = self.typing_font_size_px;

@@ -5,7 +5,7 @@ use gpui::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButt
 use crate::app::NotesApp;
 use crate::constants::{
     colors::onenote_ink_muted,
-    typography::{EMPTY_STATE_FONT_SIZE, SMALL_ICON_FONT_SIZE},
+    typography::EMPTY_STATE_FONT_SIZE,
 };
 use crate::helpers::hash_str;
 use crate::models::load_note_content;
@@ -149,8 +149,8 @@ impl NotesApp {
                     let page_id = page.id.clone();
                     let is_active = Some(&page_id) == self.active_page_id.as_ref();
                     let click_id = page_id.clone();
-                    let delete_id = page_id.clone();
                     let active_sec_id = self.active_section_id.clone().unwrap_or_default();
+                    let editing = self.is_editing;
 
                     let mut page_row = div()
                         .id(("page-row", hash_str(&page_id)))
@@ -162,11 +162,49 @@ impl NotesApp {
                         page_row =
                             page_row.bg(rgb(crate::constants::colors::onenote_page_selected()));
                     }
+                    let menu_page_id = click_id.clone();
+                    let menu_sec_id = active_sec_id.clone();
                     page_row = page_row
                         .hover(|s| s.bg(rgb(crate::constants::colors::onenote_tab_idle())))
-                        .on_click(cx.listener(move |this, _, _, cx| {
-                            this.switch_to_page(active_sec_id.clone(), click_id.clone(), cx);
-                        }))
+                        .on_mouse_down(
+                            MouseButton::Left,
+                            cx.listener(move |this, _, _, cx| {
+                                if this.active_page_id.as_deref() != Some(click_id.as_str()) {
+                                    this.switch_to_page(
+                                        active_sec_id.clone(),
+                                        click_id.clone(),
+                                        cx,
+                                    );
+                                }
+                                this.section_menu_at = None;
+                                this.page_menu_at = None;
+                                cx.stop_propagation();
+                                cx.notify();
+                            }),
+                        )
+                        .on_mouse_down(
+                            MouseButton::Right,
+                            cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                                if this.active_page_id.as_deref() != Some(menu_page_id.as_str()) {
+                                    this.switch_to_page(
+                                        menu_sec_id.clone(),
+                                        menu_page_id.clone(),
+                                        cx,
+                                    );
+                                }
+                                if editing {
+                                    this.section_menu_at = None;
+                                    this.section_renaming = false;
+                                    this.page_renaming = false;
+                                    this.page_menu_at = Some((
+                                        event.position.x.as_f32(),
+                                        event.position.y.as_f32(),
+                                    ));
+                                }
+                                cx.stop_propagation();
+                                cx.notify();
+                            }),
+                        )
                         .flex()
                         .justify_between()
                         .items_center()
@@ -187,21 +225,6 @@ impl NotesApp {
                                     page.name.clone()
                                 }),
                         );
-
-                    if self.is_editing && pages.len() > 1 {
-                        page_row = page_row.child(
-                            div()
-                                .id(("delete-page", hash_str(&page_id)))
-                                .text_size(px(SMALL_ICON_FONT_SIZE))
-                                .text_color(rgb(0xff6b6b))
-                                .hover(|s: gpui::StyleRefinement| s.text_color(rgb(0xff0000)))
-                                .child("×")
-                                .on_click(cx.listener(move |this: &mut NotesApp, _, _, cx: &mut Context<'_, NotesApp>| {
-                                    this.delete_page(delete_id.clone(), cx);
-                                    cx.stop_propagation();
-                                })),
-                        );
-                    }
 
                     page_elements.push(page_row.into_any_element());
                 }

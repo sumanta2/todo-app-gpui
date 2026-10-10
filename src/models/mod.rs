@@ -76,4 +76,5 @@ pub(crate) enum ActiveField {
     SectionName,
     Heading,
     Body,
+    Search,
 }

@@ -249,6 +249,7 @@ impl NotesApp {
                 self.edit_body_anchor,
                 true,
             ),
+            ActiveField::Search => ("", 0, None, false),
         }
     }
 
@@ -258,6 +259,7 @@ impl NotesApp {
             ActiveField::SectionName => self.edit_section_name_cursor,
             ActiveField::Heading => self.edit_heading_cursor,
             ActiveField::Body => self.edit_body_cursor,
+            ActiveField::Search => 0,
         }
     }
 
@@ -279,6 +281,7 @@ impl NotesApp {
                 self.edit_body_cursor = cursor;
                 self.edit_body_anchor = None;
             }
+            ActiveField::Search => {}
         }
     }
 
@@ -300,6 +303,7 @@ impl NotesApp {
                 replace_range(&mut self.edit_section_name, start, end, replacement)
             }
             ActiveField::Heading => replace_range(&mut self.edit_heading, start, end, replacement),
+            ActiveField::Search => {}
             ActiveField::Body => {
                 replace_range(&mut self.edit_body, start, end, replacement);
                 if multiline {
@@ -347,6 +351,7 @@ impl NotesApp {
             ActiveField::SectionName => &mut self.edit_section_name,
             ActiveField::Heading => &mut self.edit_heading,
             ActiveField::Body => &mut self.edit_body,
+            ActiveField::Search => return,
         };
         let mut chars: Vec<char> = target.chars().collect();
         for (idx, ch) in text.chars().enumerate() {

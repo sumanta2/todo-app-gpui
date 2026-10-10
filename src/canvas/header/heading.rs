@@ -14,6 +14,54 @@ impl NotesApp {
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let font_size = self.page_heading_font_size * self.canvas_zoom;
+        if !self.page_renaming {
+            let label = if self.edit_heading.trim().is_empty() {
+                "Heading..."
+            } else {
+                self.edit_heading.as_str()
+            };
+            let row = div()
+                .id("heading-menu-target")
+                .cursor_text()
+                .on_mouse_down(
+                    MouseButton::Left,
+                    cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
+                        this.begin_page_rename_at(window, event.position.x.as_f32(), cx);
+                        cx.stop_propagation();
+                    }),
+                )
+                .on_mouse_down(
+                    MouseButton::Right,
+                    cx.listener(|this, event: &gpui::MouseDownEvent, _, cx| {
+                        if this.is_editing {
+                            this.section_menu_at = None;
+                            this.section_renaming = false;
+                            this.page_renaming = false;
+                            this.page_menu_at =
+                                Some((event.position.x.as_f32(), event.position.y.as_f32()));
+                            cx.notify();
+                        }
+                        cx.stop_propagation();
+                    }),
+                )
+                .child(
+                    div()
+                        .text_size(px(font_size))
+                        .whitespace_nowrap()
+                        .text_color(rgb(if self.edit_heading.trim().is_empty() {
+                            crate::constants::colors::note_hint()
+                        } else {
+                            crate::constants::colors::note_ink()
+                        }))
+                        .child(label.to_string()),
+                );
+            return self.page_title_with_rule(
+                window,
+                row.into_any_element(),
+                label,
+                gpui::FontWeight::NORMAL,
+            );
+        }
         if self.edit_heading.is_empty() {
             let row = div()
                 .id("heading-placeholder")
@@ -225,5 +273,34 @@ impl NotesApp {
                 gpui::FontWeight::NORMAL,
             )
         }
+    }
+
+    /// Opens the page-name editor and puts the caret at the click.
+    ///
+    /// Clicks to the left of the title land on the first character. Clicks to the right land at the end.
+    pub(crate) fn begin_page_rename_at(
+        &mut self,
+        window: &mut gpui::Window,
+        mouse_x: f32,
+        cx: &mut Context<Self>,
+    ) {
+        if !self.is_editing {
+            return;
+        }
+        self.section_menu_at = None;
+        self.page_menu_at = None;
+        self.section_renaming = false;
+        self.page_renaming = true;
+        self.active_field = ActiveField::Heading;
+        self.focus_handle.focus(window, cx);
+        let rel_x = ((mouse_x - self.layout_sidebar_w() - self.pan_x) / self.canvas_zoom.max(0.25)
+            - HEADING_PADDING_LEFT)
+            .max(0.0);
+        let click_idx = self.heading_index_at_x(window, rel_x);
+        self.edit_heading_cursor = click_idx;
+        self.edit_heading_anchor = Some(click_idx);
+        self.is_selecting_heading = true;
+        self.cursor_visible = true;
+        cx.notify();
     }
 }

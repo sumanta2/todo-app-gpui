@@ -35,9 +35,6 @@ impl NotesApp {
             })
             .collect();
         self.prefetch_image_paths(&image_paths);
-        if self.active_field == ActiveField::Body {
-            self.ensure_body_hit_cache();
-        }
 
         for (_, item) in self.edit_canvas_items.iter().enumerate() {
             let item_id = match item {

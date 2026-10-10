@@ -153,7 +153,7 @@ impl NotesApp {
                                         / this.canvas_zoom.max(0.25)
                                         - item_x)
                                         .max(0.0);
-                                let click_idx = this.body_index_on_line(line_start, rel_x);
+                                let click_idx = this.body_index_on_line(Some(window), line_start, rel_x);
 
                                 this.edit_body_cursor = click_idx;
                                 this.edit_body_anchor = Some(click_idx);
@@ -184,7 +184,14 @@ impl NotesApp {
                             item_pos,
                         );
                         let click_idx =
-                            this.body_index_at_mouse(event.position, item_x, item_y, 6.0, 18.0);
+                            this.body_index_at_mouse(
+                                Some(window),
+                                event.position,
+                                item_x,
+                                item_y,
+                                6.0,
+                                18.0,
+                            );
                         this.edit_body_cursor = click_idx;
                         this.edit_body_anchor = Some(click_idx);
                         this.is_selecting_body = true;
@@ -205,7 +212,14 @@ impl NotesApp {
                             item_pos,
                         );
                         let click_idx =
-                            this.body_index_at_mouse(event.position, item_x, item_y, 6.0, 18.0);
+                            this.body_index_at_mouse(
+                                Some(window),
+                                event.position,
+                                item_x,
+                                item_y,
+                                6.0,
+                                18.0,
+                            );
                         this.edit_body_cursor = click_idx;
                         this.edit_body_anchor = Some(click_idx);
                         this.is_selecting_body = true;
@@ -311,22 +325,14 @@ impl NotesApp {
                     &line_font_colors,
                     &line_bg_colors,
                 );
-                let mut line_runs_els = Vec::new();
-                if runs.is_empty() {
-                    line_runs_els.push(
-                        div()
-                            .text_color(rgb(note_ink()))
-                            .child("\u{00A0}")
-                            .into_any_element(),
-                    );
+                let line_body = if runs.is_empty() {
+                    div()
+                        .text_color(rgb(note_ink()))
+                        .child("\u{00A0}")
+                        .into_any_element()
                 } else {
-                    for run in &runs {
-                        let color = note_ink();
-                        line_runs_els.push(crate::canvas::text_editor::styled_run_element(
-                            run, color, true, zoom,
-                        ));
-                    }
-                }
+                    crate::canvas::text_editor::styled_line_element(&runs, note_ink(), zoom)
+                };
 
                 let line_el = crate::canvas::text_editor::style_line_row(
                     div()
@@ -342,7 +348,7 @@ impl NotesApp {
                     zoom,
                 )
                 .id(("inactive-line-row", id_num.wrapping_add(line_idx)))
-                .children(line_runs_els)
+                .child(line_body)
                 .on_mouse_down(
                     MouseButton::Left,
                     cx.listener(move |this, event: &gpui::MouseDownEvent, window, cx| {
@@ -361,7 +367,7 @@ impl NotesApp {
                             / this.canvas_zoom.max(0.25)
                             - item_x)
                             .max(0.0);
-                        let click_idx = this.body_index_on_line(line_start, rel_x);
+                        let click_idx = this.body_index_on_line(Some(window), line_start, rel_x);
 
                         this.edit_body_cursor = click_idx;
                         this.edit_body_anchor = Some(click_idx);
@@ -393,7 +399,14 @@ impl NotesApp {
                             item_pos,
                         );
                         let click_idx =
-                            this.body_index_at_mouse(event.position, item_x, item_y, 6.0, 18.0);
+                            this.body_index_at_mouse(
+                                Some(window),
+                                event.position,
+                                item_x,
+                                item_y,
+                                6.0,
+                                18.0,
+                            );
                         this.edit_body_cursor = click_idx;
                         this.edit_body_anchor = Some(click_idx);
                         this.is_selecting_body = true;
@@ -414,7 +427,14 @@ impl NotesApp {
                             item_pos,
                         );
                         let click_idx =
-                            this.body_index_at_mouse(event.position, item_x, item_y, 6.0, 18.0);
+                            this.body_index_at_mouse(
+                                Some(window),
+                                event.position,
+                                item_x,
+                                item_y,
+                                6.0,
+                                18.0,
+                            );
                         this.edit_body_cursor = click_idx;
                         this.edit_body_anchor = Some(click_idx);
                         this.is_selecting_body = true;

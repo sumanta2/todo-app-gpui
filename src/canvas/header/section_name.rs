@@ -3,9 +3,7 @@
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, MouseButton};
 
 use crate::app::NotesApp;
-use crate::constants::typography::WEIGHT_BOLD;
 use crate::models::ActiveField;
-use crate::text::selection::calculate_line_text_offset_with_font;
 
 impl NotesApp {
     pub(super) fn build_section_name_editor(
@@ -175,13 +173,7 @@ impl NotesApp {
                         this.focus_handle.focus(window, cx);
                         let rel_x =
                             (event.position.x.as_f32() - this.active_section_tab_x).max(0.0);
-                        let click_idx = calculate_line_text_offset_with_font(
-                            rel_x,
-                            &this.edit_section_name,
-                            this.section_name_font_size,
-                            WEIGHT_BOLD,
-                            this.font_type(),
-                        );
+                        let click_idx = this.section_name_index_at_x(window, rel_x);
                         this.edit_section_name_cursor = click_idx;
                         this.edit_section_name_anchor = Some(click_idx);
                         this.is_selecting_section_name = true;
@@ -190,17 +182,11 @@ impl NotesApp {
                         cx.stop_propagation();
                     }),
                 )
-                .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
+                .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, window, cx| {
                     if this.is_selecting_section_name {
                         let rel_x =
                             (event.position.x.as_f32() - this.active_section_tab_x).max(0.0);
-                        let drag_idx = calculate_line_text_offset_with_font(
-                            rel_x,
-                            &this.edit_section_name,
-                            this.section_name_font_size,
-                            WEIGHT_BOLD,
-                            this.font_type(),
-                        );
+                        let drag_idx = this.section_name_index_at_x(window, rel_x);
                         if crate::text::selection::assign_if_changed(
                             &mut this.edit_section_name_cursor,
                             drag_idx,

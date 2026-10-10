@@ -196,6 +196,8 @@ pub struct NotesApp {
 
     // Measured canvas top Y offset in window coordinates (updated on first canvas interaction)
     pub(crate) canvas_top_y: f32,
+    /// Window x of the sidebar notebook-name editor, measured from its layout.
+    pub(crate) note_heading_origin_x: f32,
 
     pub(crate) focus_handle: FocusHandle,
     pub(crate) active_section_id: Option<String>,

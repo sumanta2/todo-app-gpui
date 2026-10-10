@@ -154,30 +154,16 @@ impl TextEditor {
                 &line_colors,
                 &line_bgs,
             );
-            let mut line_elements = Vec::new();
-            if runs.is_empty() {
-                line_elements.push(
-                    div()
-                        .text_color(rgb(note_ink()))
-                        .text_size(px(font_size))
-                        .line_height(px(line_height))
-                        .child("\u{00A0}")
-                        .into_any_element(),
-                );
-            } else {
-                for run in &runs {
-                    let color = note_ink();
-                    line_elements.push(styled_run_element(run, color, true, self.zoom));
-                }
-            }
-
-            row = row.child(
+            row = row.child(if runs.is_empty() {
                 div()
-                    .flex()
-                    .flex_row()
-                    .items_center()
-                    .children(line_elements),
-            );
+                    .text_color(rgb(note_ink()))
+                    .text_size(px(font_size))
+                    .line_height(px(line_height))
+                    .child("\u{00A0}")
+                    .into_any_element()
+            } else {
+                styled_line_element(&runs, note_ink(), self.zoom)
+            });
 
             let row = line_wrapper(line_idx, line_start, line, row);
             line_rows.push(row);
@@ -237,66 +223,28 @@ fn slice_f32(values: &[f32], start: usize, end: usize, len: usize) -> Vec<f32> {
     sliced
 }
 
-/// Paints one styled text run. Decorations are skipped for invisible width-matching ghosts.
-pub(crate) fn styled_run_element(
-    run: &crate::text::styles::StyledRun,
-    color: u32,
-    decorations: bool,
+/// Paints one line. Same-size runs share one text layout, so a bold run does not
+/// insert a gap before the regular characters that follow it.
+pub(crate) fn styled_line_element(
+    runs: &[crate::text::styles::StyledRun],
+    fallback_color: u32,
     zoom: f32,
 ) -> AnyElement {
     let zoom = if zoom <= 0.05 { 1.0 } else { zoom };
-    let base_size = if run.font_size > 0.0 {
-        run.font_size
-    } else {
-        crate::constants::typography::CANVAS_BODY_FONT_SIZE
-    };
-    let font_size = base_size * zoom;
-    let line_height = crate::constants::typography::line_height_for_font_size(base_size) * zoom;
-    let mut text_color = if run.font_color != 0 {
-        run.font_color
-    } else {
-        color
-    };
-    if run.bg_color != 0 && run.font_color == 0 && text_color != 0 {
-        text_color = 0x1e1e1e;
-    }
-    let mut el = div()
-        .relative()
-        .text_color(if text_color == 0 {
-            rgba(0x00000000)
-        } else {
-            rgb(text_color)
-        })
-        .text_size(px(font_size))
-        .line_height(px(line_height))
-        .font_family(crate::constants::typography::font_style_name(
-            run.font_family,
-        ))
-        .font_weight(if run.is_bold {
-            gpui::FontWeight::BOLD
-        } else {
-            gpui::FontWeight::NORMAL
-        });
-    if run.bg_color != 0 {
-        el = el.bg(rgb(run.bg_color));
-    }
-    if run.is_italic {
-        el = el.italic();
-    }
-    el = el.child(run.text.replace(' ', "\u{00A0}"));
-    if decorations && run.is_underline {
-        el = el.border_b_1().border_color(rgb(text_color));
-    }
-    if decorations && run.is_strike {
-        el = el.child(
+    let groups = crate::text::shaping::font_size_groups(runs, fallback_color);
+    let mut row = div().flex().flex_row().items_center();
+    for group in groups {
+        let font_size = group.font_size * zoom;
+        let line_height =
+            crate::constants::typography::line_height_for_font_size(group.font_size) * zoom;
+        row = row.child(
             div()
-                .absolute()
-                .top(px((font_size * 0.55).max(1.0)))
-                .left(px(0.0))
-                .right(px(0.0))
-                .h(px(1.0))
-                .bg(rgb(text_color)),
+                .flex_shrink_0()
+                .text_size(px(font_size))
+                .line_height(px(line_height))
+                .whitespace_nowrap()
+                .child(gpui::StyledText::new(group.text).with_runs(group.runs)),
         );
     }
-    el.into_any_element()
+    row.into_any_element()
 }

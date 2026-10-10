@@ -45,45 +45,6 @@ pub(crate) mod typography {
         }
     }
 
-    /// Font categories supported by the application text engine.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub(crate) enum FontType {
-        SegoeUI,
-        Arial,
-        Monospace,
-        Serif,
-        Calibri,
-        Inter,
-    }
-
-    impl FontType {
-        /// Infers the font category from a font family name string.
-        pub(crate) fn from_family_name(name: &str) -> Self {
-            let lower = name.to_ascii_lowercase();
-            if lower.contains("consolas")
-                || lower.contains("mono")
-                || lower.contains("courier")
-                || lower.contains("cascadia")
-                || lower.contains("code")
-            {
-                FontType::Monospace
-            } else if lower.contains("arial") || lower.contains("helvetica") {
-                FontType::Arial
-            } else if lower.contains("times")
-                || lower.contains("georgia")
-                || lower.contains("serif")
-            {
-                FontType::Serif
-            } else if lower.contains("calibri") {
-                FontType::Calibri
-            } else if lower.contains("inter") || lower.contains("roboto") {
-                FontType::Inter
-            } else {
-                FontType::SegoeUI
-            }
-        }
-    }
-
     /// Notebook title in the left sidebar. Lato, about 16px.
     pub(crate) const NOTE_HEADING_FONT_SIZE: f32 = 16.0;
 
@@ -129,11 +90,6 @@ pub(crate) mod typography {
 
     /// Deepest indent level the Home ribbon will apply.
     pub(crate) const MAX_INDENT_LEVEL: u8 = 16;
-
-    // Standard Font Weight Multipliers used for accurate hit-testing
-    pub(crate) const WEIGHT_NORMAL: f32 = 1.00;
-    pub(crate) const WEIGHT_SEMIBOLD: f32 = 1.05;
-    pub(crate) const WEIGHT_BOLD: f32 = 1.10;
 
     /// Width of the text caret, in pixels. One pixel sits on the character boundary.
     pub(crate) const CURSOR_WIDTH: f32 = 1.0;
@@ -493,9 +449,6 @@ pub(crate) mod colors {
     pub(crate) fn sidebar_on_selected() -> u32 {
         pick(|theme| theme.sidebar_on_selected.0)
     }
-    pub(crate) fn sidebar_rule() -> u32 {
-        pick(|theme| theme.sidebar_rule.0)
-    }
     pub(crate) fn font_color_options() -> Vec<u32> {
         match installed().read() {
             Ok(theme) => theme.font_color_options.iter().map(|color| color.0).collect(),
@@ -521,19 +474,6 @@ pub(crate) mod colors {
 pub(crate) mod layout {
     /// Initial canvas top edge in window coordinates; replaced by the measured value after the first paint.
     pub(crate) const INITIAL_CANVAS_TOP_Y: f32 = 78.0;
-
-    /// Left padding of the sidebar container.
-    pub(crate) const SIDEBAR_PADDING_LEFT: f32 = 12.0;
-
-    /// Left padding inside a note item in the sidebar.
-    pub(crate) const NOTE_ITEM_PADDING_LEFT: f32 = 8.0;
-
-    /// Left border width for selected note items.
-    pub(crate) const NOTE_ITEM_BORDER_LEFT: f32 = 2.0;
-
-    /// Combined X offset to the start of note title text inside the sidebar.
-    pub(crate) const NOTE_ITEM_TEXT_OFFSET_X: f32 =
-        SIDEBAR_PADDING_LEFT + NOTE_ITEM_BORDER_LEFT + NOTE_ITEM_PADDING_LEFT; // 22.0px
 
     /// Left inset of the page title drawn at the top of the canvas.
     pub(crate) const HEADING_PADDING_LEFT: f32 = 16.0;

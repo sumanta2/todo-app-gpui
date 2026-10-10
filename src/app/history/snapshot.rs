@@ -174,9 +174,6 @@ pub(super) fn restore(app: &mut NotesApp, snap: EditSnapshot) {
     app.page_items_cache = None;
     app.cursor_visible = true;
     app.touch_body_layout();
-    if app.active_field == ActiveField::Body {
-        app.ensure_body_hit_cache();
-    }
 }
 
 fn patch_open_page(content: &mut NoteContent, app: &NotesApp, images: &[String]) {

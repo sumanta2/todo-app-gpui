@@ -83,6 +83,9 @@ impl NotesApp {
                     )
                     .child(
                         div()
+                            .flex()
+                            .flex_row()
+                            .items_center()
                             .text_size(px(13.0))
                             .text_color(rgb(if query.is_empty() && !search_focused {
                                 crate::constants::colors::note_hint()
@@ -91,10 +94,18 @@ impl NotesApp {
                             }))
                             .child(if query.is_empty() && !search_focused {
                                 "Search notes".to_string()
-                            } else if search_focused {
-                                format!("{query}|")
                             } else {
                                 query
+                            })
+                            .when(search_focused, |this| {
+                                this.child(
+                                    div()
+                                        .w(px(crate::constants::typography::CURSOR_WIDTH))
+                                        .h(px(14.0))
+                                        .ml(px(1.0))
+                                        .flex_shrink_0()
+                                        .bg(rgb(crate::constants::colors::cursor())),
+                                )
                             }),
                     ),
             )

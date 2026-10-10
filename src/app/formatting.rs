@@ -241,34 +241,102 @@ impl NotesApp {
         self.body_layout_stamp = self.body_layout_stamp.wrapping_add(1);
     }
 
-    pub(crate) fn ensure_body_hit_cache(&mut self) {
-        let font = self.font_type();
+    pub(crate) fn ensure_body_hit_cache(&mut self, window: &gpui::Window) {
+        let zoom = self.canvas_zoom.max(0.05);
         let size = self.canvas_body_font_size;
         let stamp = self.body_layout_stamp;
         let fresh = self.body_hit_cache.as_ref().is_some_and(|cache| {
-            cache.stamp == stamp && cache.font_size == size && cache.font_type == font
+            cache.stamp == stamp && cache.font_size == size && (cache.zoom - zoom).abs() < 0.001
         });
         if !fresh {
+            let text = self.edit_body.clone();
+            let bold = self.edit_body_bold.clone();
+            let italic = self.edit_body_italic.clone();
+            let families = self.edit_body_font_family.clone();
+            let sizes = self.edit_body_font_size.clone();
             self.body_hit_cache = Some(crate::text::selection::build_text_hit_cache(
-                &self.edit_body,
-                Some(&self.edit_body_bold),
+                window,
+                &text,
+                &bold,
+                &italic,
+                &families,
+                &sizes,
                 size,
-                font,
+                zoom,
                 stamp,
             ));
         }
     }
 
+    /// Widest body line, from the last shaped caret cache.
+    pub(crate) fn body_text_advance(&self) -> f32 {
+        self.body_hit_cache
+            .as_ref()
+            .map(crate::text::selection::cache_max_advance)
+            .unwrap_or(0.0)
+    }
+
+    /// Click index in the page heading. `rel_x` is already divided by the canvas zoom.
+    pub(crate) fn heading_index_at_x(&self, window: &gpui::Window, rel_x: f32) -> usize {
+        crate::text::shaping::uniform_index_at_x(
+            window,
+            &self.edit_heading,
+            crate::text::shaping::UniformFace {
+                family: self.font_family.as_str(),
+                size: self.page_heading_font_size,
+                weight: gpui::FontWeight::NORMAL,
+                italic: false,
+            },
+            self.canvas_zoom,
+            rel_x,
+        )
+    }
+
+    /// Click index in the section tab. `rel_x` is in screen pixels, matching the unzoomed label.
+    pub(crate) fn section_name_index_at_x(&self, window: &gpui::Window, rel_x: f32) -> usize {
+        crate::text::shaping::uniform_index_at_x(
+            window,
+            &self.edit_section_name,
+            crate::text::shaping::UniformFace {
+                family: "Calibri",
+                size: self.section_name_font_size,
+                weight: gpui::FontWeight::BOLD,
+                italic: false,
+            },
+            1.0,
+            rel_x,
+        )
+    }
+
+    /// Click index in the sidebar notebook name. `rel_x` is in screen pixels.
+    pub(crate) fn note_heading_index_at_x(&self, window: &gpui::Window, rel_x: f32) -> usize {
+        crate::text::shaping::uniform_index_at_x(
+            window,
+            &self.edit_note_heading,
+            crate::text::shaping::UniformFace {
+                family: "Lato",
+                size: self.note_heading_font_size,
+                weight: gpui::FontWeight::SEMIBOLD,
+                italic: false,
+            },
+            1.0,
+            rel_x,
+        )
+    }
+
     /// Character index under a window point, using the cached line advances.
     pub(crate) fn body_index_at_mouse(
         &mut self,
+        window: Option<&gpui::Window>,
         mouse: gpui::Point<gpui::Pixels>,
         item_x: f32,
         item_y: f32,
         header_x: f32,
         header_y: f32,
     ) -> usize {
-        self.ensure_body_hit_cache();
+        if let Some(window) = window {
+            self.ensure_body_hit_cache(window);
+        }
         let header_y = self.body_text_header_y().unwrap_or(header_y);
         let (rel_x, rel_y) = crate::text::selection::canvas_text_rel(
             mouse,
@@ -302,8 +370,15 @@ impl NotesApp {
     }
 
     /// Character index on a known line. `rel_x` is already local to the text block.
-    pub(crate) fn body_index_on_line(&mut self, line_start: usize, rel_x: f32) -> usize {
-        self.ensure_body_hit_cache();
+    pub(crate) fn body_index_on_line(
+        &mut self,
+        window: Option<&gpui::Window>,
+        line_start: usize,
+        rel_x: f32,
+    ) -> usize {
+        if let Some(window) = window {
+            self.ensure_body_hit_cache(window);
+        }
         let found = self.body_hit_cache.as_ref().and_then(|cache| {
             cache
                 .lines
@@ -390,12 +465,7 @@ impl NotesApp {
 
     /// Width the active text box grows to so the longest line stays on one row.
     pub(crate) fn fitted_text_box_width(&self, base_width: f32, item_x: f32) -> f32 {
-        let line_text_w = crate::text::selection::max_text_advance(
-            &self.edit_body,
-            Some(&self.edit_body_bold),
-            self.canvas_body_font_size,
-            self.font_type(),
-        );
+        let line_text_w = self.body_text_advance();
         let needed_width = line_text_w + 24.0;
         let desired_w = needed_width.max(base_width).max(250.0);
         let sidebar_w = self.layout_sidebar_w();
@@ -407,36 +477,49 @@ impl NotesApp {
     }
 
     /// Viewer hit test. The cache is reused while the same segment and font stay put.
-    pub(crate) fn viewer_index_at_mouse(
+    pub(crate) fn ensure_viewer_hit_cache(
         &mut self,
+        window: &gpui::Window,
         segment_id: &str,
         text: &str,
-        bold_flags: &[bool],
+        bold: &[bool],
+        italic: &[bool],
+        families: &[u8],
+        sizes: &[f32],
+    ) {
+        let zoom = self.canvas_zoom.max(0.05);
+        let size = self.canvas_body_font_size;
+        let hash = crate::text::selection::content_hash(text, bold, italic, families, sizes);
+        let fresh = self.viewer_hit_cache.as_ref().is_some_and(|cache| {
+            self.viewer_hit_cache_id.as_deref() == Some(segment_id)
+                && cache.content_hash == hash
+                && cache.font_size == size
+                && (cache.zoom - zoom).abs() < 0.001
+        });
+        if !fresh {
+            self.viewer_hit_cache = Some(crate::text::selection::build_text_hit_cache(
+                window, text, bold, italic, families, sizes, size, zoom, 0,
+            ));
+            self.viewer_hit_cache_id = Some(segment_id.to_string());
+        }
+    }
+
+    pub(crate) fn viewer_index_at_mouse(
+        &mut self,
+        window: &gpui::Window,
+        segment_id: &str,
+        text: &str,
+        bold: &[bool],
+        italic: &[bool],
+        families: &[u8],
+        sizes: &[f32],
         mouse: gpui::Point<gpui::Pixels>,
         item_x: f32,
         item_y: f32,
         header_x: f32,
         header_y: f32,
     ) -> usize {
-        let font = self.font_type();
-        let size = self.canvas_body_font_size;
-        let fresh = self.viewer_hit_cache.as_ref().is_some_and(|cache| {
-            self.viewer_hit_cache_id.as_deref() == Some(segment_id)
-                && cache.byte_len == text.len()
-                && cache.bold_len == bold_flags.len()
-                && cache.font_size == size
-                && cache.font_type == font
-        });
-        if !fresh {
-            self.viewer_hit_cache = Some(crate::text::selection::build_text_hit_cache(
-                text,
-                Some(bold_flags),
-                size,
-                font,
-                0,
-            ));
-            self.viewer_hit_cache_id = Some(segment_id.to_string());
-        }
+        self.ensure_viewer_hit_cache(window, segment_id, text, bold, italic, families, sizes);
         let (rel_x, rel_y) = crate::text::selection::canvas_text_rel(
             mouse,
             self.layout_sidebar_w(),
@@ -541,12 +624,6 @@ impl NotesApp {
             }
         }
         None
-    }
-
-    /// Returns the active FontType inferred from the currently configured font family.
-    #[inline]
-    pub(crate) fn font_type(&self) -> crate::constants::typography::FontType {
-        crate::constants::typography::FontType::from_family_name(&self.font_family)
     }
 
     /// Computes the visual line height for canvas text blocks at current standardized font size.

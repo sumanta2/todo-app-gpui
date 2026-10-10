@@ -82,6 +82,7 @@ impl NotesApp {
             pan_start_mouse: None,
             pan_start_val: None,
             canvas_top_y: crate::constants::layout::INITIAL_CANVAS_TOP_Y,
+            note_heading_origin_x: 0.0,
             focus_handle: cx.focus_handle(),
             active_block_index: None,
             resize_block_index: None,
@@ -280,12 +281,7 @@ impl NotesApp {
                 );
                 let active_block_index = self.active_block_index;
 
-                let line_text_w = crate::text::selection::max_text_advance(
-                    &edit_body,
-                    Some(&edit_body_bold),
-                    self.canvas_body_font_size,
-                    self.font_type(),
-                );
+                let line_text_w = self.body_text_advance();
                 let needed_width = line_text_w + 24.0;
                 let canvas_visible_w = (window_w - sidebar_w - page_sidebar_w - 30.0).max(300.0);
 
@@ -350,9 +346,6 @@ impl NotesApp {
                     }
                 }
             }
-        }
-        if self.active_field == ActiveField::Body {
-            self.ensure_body_hit_cache();
         }
     }
 
@@ -521,7 +514,6 @@ impl NotesApp {
         self.edit_body_anchor = None;
         self.is_selecting_body = false;
         self.cursor_visible = true;
-        self.ensure_body_hit_cache();
     }
 
     /// A text box whose rectangle contains the click, if one exists.

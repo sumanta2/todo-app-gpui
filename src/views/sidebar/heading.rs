@@ -1,15 +1,35 @@
 //! Notebook name field inside the selected row of the left list.
 
-use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, IntoElement, MouseButton};
+use gpui::{
+    canvas, div, prelude::*, px, rgb, rgba, AnyElement, Context, Entity, IntoElement, MouseButton,
+};
 
 use crate::app::NotesApp;
-use crate::constants::{
-    colors::{cursor, sidebar_item_text, sidebar_on_selected},
-    layout::NOTE_ITEM_TEXT_OFFSET_X,
-    typography::WEIGHT_SEMIBOLD,
-};
+use crate::constants::colors::{cursor, sidebar_item_text, sidebar_on_selected};
 use crate::models::ActiveField;
-use crate::text::selection::{calculate_line_text_offset_with_font, get_selection_range};
+use crate::text::selection::get_selection_range;
+
+/// Records the notebook-name editor's left edge so clicks use the real text origin.
+fn note_heading_origin_tracker(entity: Entity<NotesApp>) -> impl IntoElement {
+    canvas(
+        move |bounds, _, cx| {
+            entity.update(cx, |this, _| {
+                this.note_heading_origin_x = bounds.origin.x.as_f32();
+            });
+        },
+        |_, _, _, _| {},
+    )
+    .absolute()
+    .size_full()
+}
+
+fn note_name_face(text: impl Into<String>, font_size: f32) -> gpui::Div {
+    div()
+        .font_family("Lato")
+        .font_weight(gpui::FontWeight::SEMIBOLD)
+        .text_size(px(font_size))
+        .child(text.into())
+}
 
 impl NotesApp {
     /// Name editor for the selected notebook, or the plain title when that row is not being renamed.
@@ -22,12 +42,15 @@ impl NotesApp {
     ) -> AnyElement {
         if self.is_editing && is_selected {
             let font_size = self.note_heading_font_size;
+            let origin_tracker = note_heading_origin_tracker(cx.entity());
             let editor = if self.edit_note_heading.is_empty() {
                 div()
                     .id("note-heading-placeholder")
                     .relative()
                     .flex()
                     .items_center()
+                    .cursor_text()
+                    .child(origin_tracker)
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|this, _, window, cx| {
@@ -41,14 +64,13 @@ impl NotesApp {
                         }),
                     )
                     .child(
-                        div()
-                            .font_family("Lato")
-                            .text_color(rgb(if is_selected {
+                        note_name_face("Notebook Name...", font_size).text_color(rgb(
+                            if is_selected {
                                 sidebar_on_selected()
                             } else {
                                 sidebar_item_text()
-                            }))
-                            .child("Notebook Name..."),
+                            },
+                        )),
                     )
                     .child(if is_focused {
                         div()
@@ -93,7 +115,10 @@ impl NotesApp {
                             .flex()
                             .flex_row()
                             .items_center()
-                            .child(div().text_color(rgba(0x00000000)).child(before_disp))
+                            .child(
+                                note_name_face(before_disp, font_size)
+                                    .text_color(rgba(0x00000000)),
+                            )
                             .child(
                                 div()
                                     .bg(rgb(crate::constants::colors::note_selection()))
@@ -101,20 +126,25 @@ impl NotesApp {
                                     .h(px(font_size + 2.0))
                                     .flex()
                                     .items_center()
-                                    .child(div().text_color(rgba(0x00000000)).child(sel_disp)),
+                                    .child(
+                                        note_name_face(sel_disp, font_size)
+                                            .text_color(rgba(0x00000000)),
+                                    ),
                             )
                             .into_any_element(),
                     );
                 }
 
                 els.push(
-                    div()
-                        .child(if text.is_empty() {
+                    note_name_face(
+                        if text.is_empty() {
                             "\u{00A0}".to_string()
                         } else {
                             text.replace(' ', "\u{00A0}")
-                        })
-                        .into_any_element(),
+                        },
+                        font_size,
+                    )
+                    .into_any_element(),
                 );
 
                 if is_focused && !has_selection {
@@ -130,7 +160,10 @@ impl NotesApp {
                             .flex()
                             .flex_row()
                             .items_center()
-                            .child(div().text_color(rgba(0x00000000)).child(before_disp))
+                            .child(
+                                note_name_face(before_disp, font_size)
+                                    .text_color(rgba(0x00000000)),
+                            )
                             .child(
                                 div()
                                     .w(px(1.5))
@@ -152,20 +185,16 @@ impl NotesApp {
                     .relative()
                     .flex()
                     .items_center()
+                    .cursor_text()
+                    .child(origin_tracker)
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(|this, event: &gpui::MouseDownEvent, window, cx| {
                             this.active_field = ActiveField::NoteHeading;
                             this.focus_handle.focus(window, cx);
                             let rel_x =
-                                (event.position.x.as_f32() - NOTE_ITEM_TEXT_OFFSET_X).max(0.0);
-                            let click_idx = calculate_line_text_offset_with_font(
-                                rel_x,
-                                &this.edit_note_heading,
-                                this.note_heading_font_size,
-                                WEIGHT_SEMIBOLD,
-                                this.font_type(),
-                            );
+                                (event.position.x.as_f32() - this.note_heading_origin_x).max(0.0);
+                            let click_idx = this.note_heading_index_at_x(window, rel_x);
                             this.edit_note_heading_cursor = click_idx;
                             this.edit_note_heading_anchor = Some(click_idx);
                             this.is_selecting_note_heading = true;
@@ -174,17 +203,11 @@ impl NotesApp {
                             cx.stop_propagation();
                         }),
                     )
-                    .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
+                    .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, window, cx| {
                         if this.is_selecting_note_heading {
                             let rel_x =
-                                (event.position.x.as_f32() - NOTE_ITEM_TEXT_OFFSET_X).max(0.0);
-                            let drag_idx = calculate_line_text_offset_with_font(
-                                rel_x,
-                                &this.edit_note_heading,
-                                this.note_heading_font_size,
-                                WEIGHT_SEMIBOLD,
-                                this.font_type(),
-                            );
+                                (event.position.x.as_f32() - this.note_heading_origin_x).max(0.0);
+                            let drag_idx = this.note_heading_index_at_x(window, rel_x);
                             if crate::text::selection::assign_if_changed(
                                 &mut this.edit_note_heading_cursor,
                                 drag_idx,

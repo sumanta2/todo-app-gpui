@@ -3,14 +3,14 @@
 use gpui::{div, prelude::*, px, rgb, rgba, AnyElement, Context, MouseButton};
 
 use crate::app::NotesApp;
-use crate::constants::{layout::HEADING_PADDING_LEFT, typography::WEIGHT_NORMAL};
+use crate::constants::layout::HEADING_PADDING_LEFT;
 use crate::models::ActiveField;
-use crate::text::selection::calculate_line_text_offset_with_font;
 
 impl NotesApp {
     pub(crate) fn build_heading_editor(
         &self,
         is_heading_focused: bool,
+        window: &mut gpui::Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let font_size = self.page_heading_font_size * self.canvas_zoom;
@@ -56,7 +56,12 @@ impl NotesApp {
                 } else {
                     div()
                 });
-            return self.page_title_with_rule(row.into_any_element(), "Heading...");
+            return self.page_title_with_rule(
+                window,
+                row.into_any_element(),
+                "Heading...",
+                gpui::FontWeight::NORMAL,
+            );
         } else {
             let sel_start = self
                 .edit_heading_anchor
@@ -173,13 +178,7 @@ impl NotesApp {
                             / this.canvas_zoom.max(0.25)
                             - HEADING_PADDING_LEFT)
                             .max(0.0);
-                        let click_idx = calculate_line_text_offset_with_font(
-                            rel_x,
-                            &this.edit_heading,
-                            this.page_heading_font_size,
-                            WEIGHT_NORMAL,
-                            this.font_type(),
-                        );
+                        let click_idx = this.heading_index_at_x(window, rel_x);
                         this.edit_heading_cursor = click_idx;
                         this.edit_heading_anchor = Some(click_idx);
                         this.is_selecting_heading = true;
@@ -188,20 +187,14 @@ impl NotesApp {
                         cx.stop_propagation();
                     }),
                 )
-                .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
+                .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, window, cx| {
                     if this.is_selecting_heading {
                         let sidebar_w = this.layout_sidebar_w();
                         let rel_x = ((event.position.x.as_f32() - sidebar_w - this.pan_x)
                             / this.canvas_zoom.max(0.25)
                             - HEADING_PADDING_LEFT)
                             .max(0.0);
-                        let drag_idx = calculate_line_text_offset_with_font(
-                            rel_x,
-                            &this.edit_heading,
-                            this.page_heading_font_size,
-                            WEIGHT_NORMAL,
-                            this.font_type(),
-                        );
+                        let drag_idx = this.heading_index_at_x(window, rel_x);
                         if crate::text::selection::assign_if_changed(
                             &mut this.edit_heading_cursor,
                             drag_idx,
@@ -225,7 +218,12 @@ impl NotesApp {
                     }),
                 )
                 .children(elements);
-            self.page_title_with_rule(row.into_any_element(), text)
+            self.page_title_with_rule(
+                window,
+                row.into_any_element(),
+                text,
+                gpui::FontWeight::NORMAL,
+            )
         }
     }
 }

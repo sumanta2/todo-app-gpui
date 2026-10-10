@@ -4,21 +4,20 @@ mod heading;
 mod page_title;
 mod section_name;
 
-use gpui::{div, prelude::*, px, rgb, Context, IntoElement};
+use gpui::{div, prelude::*, px, rgb, Context, FontWeight, IntoElement, Window};
 
 use crate::app::NotesApp;
-use crate::constants::typography::{
-    BUTTON_FONT_SIZE, SMALL_ICON_FONT_SIZE, WEIGHT_BOLD, WEIGHT_NORMAL,
-};
+use crate::constants::typography::{BUTTON_FONT_SIZE, SMALL_ICON_FONT_SIZE};
 use crate::helpers::hash_str;
 use crate::models::NoteContent;
-use crate::text::selection::calculate_text_width_for_font;
+use crate::text::shaping::{shaped_uniform_prefix, UniformFace};
 
 impl NotesApp {
     pub(crate) fn build_section_tabs(
         &mut self,
         content: &NoteContent,
         is_section_name_focused: bool,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let mut current_tab_x = self.layout_sidebar_w();
@@ -111,17 +110,24 @@ impl NotesApp {
             } else {
                 &sec.name
             };
-            let weight = if is_active {
-                WEIGHT_BOLD
-            } else {
-                WEIGHT_NORMAL
-            };
-            let text_w = calculate_text_width_for_font(
+            let text_w = shaped_uniform_prefix(
+                window,
                 tab_text,
-                self.section_name_font_size,
-                weight,
-                self.font_type(),
-            );
+                UniformFace {
+                    family: "Calibri",
+                    size: self.section_name_font_size,
+                    weight: if is_active {
+                        FontWeight::BOLD
+                    } else {
+                        FontWeight::NORMAL
+                    },
+                    italic: false,
+                },
+                1.0,
+            )
+            .last()
+            .copied()
+            .unwrap_or(0.0);
             let mut tab_w = 12.0 + text_w;
             if content.sections.len() > 1 {
                 tab_w += 18.0;

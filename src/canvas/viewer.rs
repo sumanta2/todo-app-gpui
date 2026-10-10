@@ -29,7 +29,7 @@ impl NotesApp {
         &mut self,
         content: &NoteContent,
         page_sidebar: AnyElement,
-        _window: &mut Window,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> impl IntoElement {
         let mut viewer_elements = Vec::new();
@@ -69,6 +69,7 @@ impl NotesApp {
                         t.x,
                         t.y,
                         t.width.unwrap_or(250.0),
+                        window,
                         cx,
                     );
                     viewer_elements.push(seg);
@@ -187,6 +188,7 @@ impl NotesApp {
                                     m.x,
                                     y_cursor,
                                     m.width.unwrap_or(250.0),
+                                    window,
                                     cx,
                                 );
                                 viewer_elements.push(seg);
@@ -301,6 +303,7 @@ impl NotesApp {
                     ))
                     .child(
                         self.page_title_with_rule(
+                            window,
                             div()
                                 .text_size(px(self.scaled(self.page_heading_font_size)))
                                 .whitespace_nowrap()
@@ -309,6 +312,7 @@ impl NotesApp {
                                 .child(page_name.clone())
                                 .into_any_element(),
                             &page_name,
+                            gpui::FontWeight::BOLD,
                         ),
                     ),
             );

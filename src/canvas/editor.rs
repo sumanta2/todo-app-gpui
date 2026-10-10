@@ -4,12 +4,8 @@ use gpui::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButt
 
 use crate::app::NotesApp;
 use crate::canvas::canvas_top_tracker;
-use crate::constants::{
-    layout::{HEADING_PADDING_LEFT, HEADING_PADDING_TOP},
-    typography::{WEIGHT_BOLD, WEIGHT_NORMAL},
-};
+use crate::constants::layout::{HEADING_PADDING_LEFT, HEADING_PADDING_TOP};
 use crate::models::{ActiveField, CanvasItem, NoteContent};
-use crate::text::selection::calculate_line_text_offset_with_font;
 
 impl NotesApp {
     /// Renders the editable note canvas and its surrounding controls.
@@ -32,8 +28,11 @@ impl NotesApp {
         let is_body_focused =
             self.focus_handle.is_focused(window) && self.active_field == ActiveField::Body;
 
-        let section_tabs = self.build_section_tabs(content, is_section_name_focused, cx);
-        let heading_content = self.build_heading_editor(is_heading_focused, cx);
+        if self.active_field == ActiveField::Body {
+            self.ensure_body_hit_cache(window);
+        }
+        let section_tabs = self.build_section_tabs(content, is_section_name_focused, window, cx);
+        let heading_content = self.build_heading_editor(is_heading_focused, window, cx);
         let canvas_elements = self.render_canvas_elements(is_body_focused, cx);
 
         let mut canvas_container = div()
@@ -154,13 +153,7 @@ impl NotesApp {
                             / this.canvas_zoom.max(0.25)
                             - HEADING_PADDING_LEFT)
                             .max(0.0);
-                        let drag_idx = calculate_line_text_offset_with_font(
-                            rel_x,
-                            &this.edit_heading,
-                            this.page_heading_font_size,
-                            WEIGHT_NORMAL,
-                            this.font_type(),
-                        );
+                        let drag_idx = this.heading_index_at_x(window, rel_x);
                         if crate::text::selection::assign_if_changed(
                             &mut this.edit_heading_cursor,
                             drag_idx,
@@ -170,13 +163,7 @@ impl NotesApp {
                     } else if this.is_selecting_section_name {
                         let rel_x =
                             (event.position.x.as_f32() - this.active_section_tab_x).max(0.0);
-                        let drag_idx = calculate_line_text_offset_with_font(
-                            rel_x,
-                            &this.edit_section_name,
-                            this.section_name_font_size,
-                            WEIGHT_BOLD,
-                            this.font_type(),
-                        );
+                        let drag_idx = this.section_name_index_at_x(window, rel_x);
                         if crate::text::selection::assign_if_changed(
                             &mut this.edit_section_name_cursor,
                             drag_idx,

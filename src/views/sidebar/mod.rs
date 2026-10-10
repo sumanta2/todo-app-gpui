@@ -119,6 +119,11 @@ impl NotesApp {
                                     } else {
                                         item.border_b_1().border_color(rgb(onenote_bar_line()))
                                     };
+                                    item = if is_selected && self.is_editing {
+                                        item.cursor_text()
+                                    } else {
+                                        item
+                                    };
                                     item.hover(|s| {
                                         if is_selected {
                                             s

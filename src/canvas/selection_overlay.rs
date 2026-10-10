@@ -38,7 +38,12 @@ impl SelectionOverlay {
 }
 
 impl Render for SelectionOverlay {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        if self.kind == HighlightKind::Body {
+            self.app.update(cx, |app, _| {
+                app.ensure_body_hit_cache(window);
+            });
+        }
         let app = self.app.read(cx);
         let zoom = app.canvas_zoom.max(0.25);
         let bar_h = app.canvas_selection_height() * zoom;
@@ -333,7 +338,7 @@ impl NotesApp {
                 let Some((item_x, item_y)) = self.body_drag_origin else {
                     return;
                 };
-                let drag_idx = self.body_index_at_mouse(pos, item_x, item_y, 6.0, 18.0);
+                let drag_idx = self.body_index_at_mouse(None, pos, item_x, item_y, 6.0, 18.0);
                 if crate::text::selection::assign_if_changed(&mut self.edit_body_cursor, drag_idx) {
                     self.refresh_body_selection(cx, false);
                 }

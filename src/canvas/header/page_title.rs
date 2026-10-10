@@ -1,20 +1,34 @@
 //! Page title, the rule under it, and the notebook date.
 
-use gpui::{div, prelude::*, px, rgb, AnyElement};
+use gpui::{div, prelude::*, px, rgb, AnyElement, FontWeight, Window};
 
 use crate::app::NotesApp;
-use crate::constants::typography::WEIGHT_NORMAL;
-use crate::text::selection::calculate_text_width_for_font;
+use crate::text::shaping::{shaped_uniform_prefix, UniformFace};
 
 impl NotesApp {
-    pub(crate) fn page_title_with_rule(&self, title: AnyElement, label: &str) -> AnyElement {
+    pub(crate) fn page_title_with_rule(
+        &self,
+        window: &Window,
+        title: AnyElement,
+        label: &str,
+        weight: FontWeight,
+    ) -> AnyElement {
         let zoom = self.canvas_zoom.max(0.25);
-        let text_w = calculate_text_width_for_font(
+        let text_w = shaped_uniform_prefix(
+            window,
             label,
-            self.page_heading_font_size,
-            WEIGHT_NORMAL,
-            self.font_type(),
-        ) * zoom;
+            UniformFace {
+                family: self.font_family.as_str(),
+                size: self.page_heading_font_size,
+                weight,
+                italic: false,
+            },
+            zoom,
+        )
+        .last()
+        .copied()
+        .unwrap_or(0.0)
+            * zoom;
         let line_w = text_w.max(48.0 * zoom);
         let max_w = (self.window_w - self.layout_sidebar_w() - self.layout_page_sidebar_w() - 96.0)
             .max(160.0);

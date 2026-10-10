@@ -96,6 +96,7 @@ fn editor_in(cx: &mut gpui::App) -> NotesApp {
         pan_start_mouse: None,
         pan_start_val: None,
         canvas_top_y: crate::constants::layout::INITIAL_CANVAS_TOP_Y,
+        note_heading_origin_x: 0.0,
         focus_handle: cx.focus_handle(),
         active_section_id: Some("sec-1".to_string()),
         active_page_id: Some("page-1".to_string()),

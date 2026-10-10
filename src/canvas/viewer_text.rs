@@ -5,7 +5,7 @@ use gpui::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButt
 use crate::app::NotesApp;
 use crate::constants::colors::note_ink;
 use crate::helpers::hash_str;
-use crate::text::selection::calculate_line_text_offset_with_bold_and_font;
+use crate::text::selection::cache_index_on_line;
 
 impl NotesApp {
     /// Renders one read-only text segment: either the whole body of a plain `CanvasItem::Text`,
@@ -14,13 +14,14 @@ impl NotesApp {
     /// click/selection/cursor behavior).
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn render_viewer_text_segment(
-        &self,
+        &mut self,
         seg_id: String,
         text_content: String,
         styles: crate::models::TextStyleSpans,
         item_x: f32,
         item_y: f32,
         item_w: f32,
+        window: &mut gpui::Window,
         cx: &mut Context<Self>,
     ) -> AnyElement {
         let is_text_active = self.viewer_active_text_block_id.as_deref() == Some(seg_id.as_str());
@@ -33,6 +34,17 @@ impl NotesApp {
         let strike_flags = crate::text::styles::spans_to_bool_vec(&styles.strike, total_chars);
         let (font_families, font_sizes, font_colors, bg_colors) =
             crate::text::styles::font_runs_to_vecs(&styles.font_runs, total_chars);
+        if is_text_active {
+            self.ensure_viewer_hit_cache(
+                window,
+                &seg_id,
+                &text_content,
+                &bold_flags,
+                &italic_flags,
+                &font_families,
+                &font_sizes,
+            );
+        }
 
         let logical_lines: Vec<&str> = text_content.split('\n').collect();
         let mut line_rows: Vec<AnyElement> = Vec::new();
@@ -127,38 +139,22 @@ impl NotesApp {
                 &line_font_colors,
                 &line_bg_colors,
             );
-            let mut line_elements = Vec::new();
-            if runs.is_empty() {
-                line_elements.push(
-                    div()
-                        .text_color(rgb(note_ink()))
-                        .child("\u{00A0}")
-                        .into_any_element(),
-                );
-            } else {
-                for run in &runs {
-                    let color = note_ink();
-                    line_elements.push(crate::canvas::text_editor::styled_run_element(
-                        run,
-                        color,
-                        true,
-                        self.canvas_zoom,
-                    ));
-                }
-            }
-
-            row = row.child(
+            row = row.child(if runs.is_empty() {
                 div()
-                    .flex()
-                    .flex_row()
-                    .items_center()
-                    .children(line_elements),
-            );
+                    .text_color(rgb(note_ink()))
+                    .child("\u{00A0}")
+                    .into_any_element()
+            } else {
+                crate::canvas::text_editor::styled_line_element(&runs, note_ink(), self.canvas_zoom)
+            });
 
             // Per-line mouse down handler for exact line targeting
             let seg_id_for_line = seg_id.clone();
-            let line_str_owned = line.to_string();
-            let line_flags_for_click = line_bold_flags.clone();
+            let text_for_line = text_content.clone();
+            let bold_for_line = bold_flags.clone();
+            let italic_for_line = italic_flags.clone();
+            let families_for_line = font_families.clone();
+            let sizes_for_line = font_sizes.clone();
             let line_layout = styles
                 .line_layouts
                 .get(line_idx)
@@ -185,29 +181,37 @@ impl NotesApp {
                             / zoom
                             - item_x)
                             .max(0.0);
-                        let advance = crate::text::selection::line_prefix(
-                            &line_str_owned,
-                            Some(&line_flags_for_click),
-                            this.canvas_body_font_size,
-                            this.font_type(),
-                        )
-                        .last()
-                        .copied()
-                        .unwrap_or(0.0);
+                        this.ensure_viewer_hit_cache(
+                            window,
+                            &seg_id_for_line,
+                            &text_for_line,
+                            &bold_for_line,
+                            &italic_for_line,
+                            &families_for_line,
+                            &sizes_for_line,
+                        );
+                        let advance = this
+                            .viewer_hit_cache
+                            .as_ref()
+                            .and_then(|cache| {
+                                cache.lines.iter().find(|line| line.start == line_global_start)
+                            })
+                            .and_then(|line| line.prefix.last().copied())
+                            .unwrap_or(0.0);
                         let content = (line_box_w - 10.0).max(0.0) / zoom;
                         let origin = crate::text::selection::aligned_line_origin(
                             content,
                             line_layout,
                             advance,
                         );
-                        let local_idx = calculate_line_text_offset_with_bold_and_font(
-                            rel_x - origin,
-                            &line_str_owned,
-                            Some(&line_flags_for_click),
-                            this.canvas_body_font_size,
-                            this.font_type(),
-                        );
-                        let click_idx = (line_global_start + local_idx).min(total_chars);
+                        let click_idx = this
+                            .viewer_hit_cache
+                            .as_ref()
+                            .map(|cache| {
+                                cache_index_on_line(cache, line_global_start, rel_x - origin)
+                            })
+                            .unwrap_or(0)
+                            .min(total_chars);
                         this.viewer_drag_origin = Some((item_x, item_y));
                         this.viewer_text_cursor = click_idx;
                         this.viewer_text_anchor = Some(click_idx);
@@ -229,6 +233,9 @@ impl NotesApp {
         let seg_id_down = seg_id.clone();
         let text_for_down = text_content.clone();
         let bold_flags_down = bold_flags.clone();
+        let italic_flags_down = italic_flags.clone();
+        let families_down = font_families.clone();
+        let sizes_down = font_sizes.clone();
 
         let mut block = div()
             .absolute()
@@ -256,9 +263,13 @@ impl NotesApp {
                     this.viewer_drag_origin = Some((item_x, item_y));
 
                     let click_idx = this.viewer_index_at_mouse(
+                        window,
                         &seg_id_down,
                         &text_for_down,
                         &bold_flags_down,
+                        &italic_flags_down,
+                        &families_down,
+                        &sizes_down,
                         event.position,
                         item_x,
                         item_y,

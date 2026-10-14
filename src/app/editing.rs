@@ -14,8 +14,39 @@ impl NotesApp {
     /// selection, and starts the cursor-blink timer used by the editor UI.
     /// This constructor is called from the app startup in main.rs:66:NotesApp::new using this syntax
     pub(crate) fn new(cx: &mut Context<Self>) -> Self {
-        // this below "load_note" function present at src\app\storage.rs filed
-        let notes = Self::load_notes().unwrap_or_default();
+        let mut notes = Self::load_notes().unwrap_or_default();
+        let mut notes_healed = false;
+        let now_str = chrono::Local::now()
+            .format("%b %d, %Y %I:%M %p")
+            .to_string();
+
+        // Auto-heal notes data: if older notes in notes.json have an empty or uninitialized
+        // created_at field, backfill it using the note's numeric millisecond timestamp ID (if available)
+        // or current local time. Persists the healed data so the canvas header date is never blank.
+        for note in &mut notes {
+            if note.created_at.trim().is_empty() {
+                if let Ok(millis) = note.id.parse::<i64>() {
+                    if let Some(dt) = chrono::DateTime::from_timestamp_millis(millis) {
+                        let local_dt: chrono::DateTime<chrono::Local> = chrono::DateTime::from(dt);
+                        note.created_at = local_dt.format("%b %d, %Y %I:%M %p").to_string();
+                    } else {
+                        note.created_at = now_str.clone();
+                    }
+                } else {
+                    note.created_at = now_str.clone();
+                }
+                notes_healed = true;
+            }
+        }
+        if notes_healed {
+            let path = Self::get_storage_path();
+            if let Some(parent) = path.parent() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+            if let Ok(content) = serde_json::to_vec(&notes) {
+                let _ = std::fs::write(path, content);
+            }
+        }
         let selected_note_id = notes.first().map(|n| n.id.clone());
         let layout = crate::app::metadata::AppMetadata::load();
         crate::constants::colors::install(layout.colors.clone());
@@ -109,6 +140,16 @@ impl NotesApp {
             page_sidebar_resizing: false,
             page_sidebar_resize_start_x: 0.0,
             page_sidebar_resize_start_w: 180.0,
+            page_drag_source_id: None,
+            page_drag_start_pos: None,
+            is_dragging_page: false,
+            page_drop_slot: None,
+            page_row_bounds: std::collections::HashMap::new(),
+            section_drag_source_id: None,
+            section_drag_start_pos: None,
+            is_dragging_section: false,
+            section_drop_slot: None,
+            section_tab_bounds: std::collections::HashMap::new(),
             home_menu_open: false,
             view_menu_open: false,
             zoom_menu_open: false,

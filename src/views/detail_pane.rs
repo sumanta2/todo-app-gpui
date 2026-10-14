@@ -3,6 +3,7 @@
 use gpui::{div, prelude::*, px, rgb, AnyElement, Context, IntoElement, MouseButton, Window};
 
 use crate::app::NotesApp;
+use crate::canvas::{bounds_tracker, BoundsKind};
 use crate::constants::{
     colors::onenote_ink_muted,
     typography::EMPTY_STATE_FONT_SIZE,
@@ -92,6 +93,27 @@ impl NotesApp {
         true
     }
 
+    /// Visual indicator showing the target insertion point when dragging pages.
+    pub(crate) fn render_page_drop_indicator(&self) -> AnyElement {
+        div()
+            .id("page-drop-indicator")
+            .h(px(2.5))
+            .w_full()
+            .my(px(1.0))
+            .bg(rgb(crate::constants::colors::onenote_accent()))
+            .rounded(px(1.5))
+            .flex()
+            .items_center()
+            .child(
+                div()
+                    .w(px(6.0))
+                    .h(px(6.0))
+                    .rounded_full()
+                    .bg(rgb(crate::constants::colors::onenote_accent())),
+            )
+            .into_any_element()
+    }
+
     /// Renders the main detail pane for the selected note.
     ///
     /// Depending on whether the note is in edit mode, this either shows the editable canvas or
@@ -145,30 +167,55 @@ impl NotesApp {
                     .unwrap_or_default();
 
                 let mut page_elements: Vec<AnyElement> = Vec::new();
-                for page in &pages {
+                let is_dragging = self.is_dragging_page;
+                let dragging_id = self.page_drag_source_id.clone();
+                let drop_slot = self.page_drop_slot;
+
+                if is_dragging && drop_slot == Some(0) {
+                    page_elements.push(self.render_page_drop_indicator());
+                }
+
+                for (idx, page) in pages.iter().enumerate() {
                     let page_id = page.id.clone();
                     let is_active = Some(&page_id) == self.active_page_id.as_ref();
                     let click_id = page_id.clone();
                     let active_sec_id = self.active_section_id.clone().unwrap_or_default();
                     let editing = self.is_editing;
+                    let is_this_dragging = is_dragging && dragging_id.as_deref() == Some(&page_id);
+
+                    let row_bounds =
+                        bounds_tracker(cx.entity().clone(), BoundsKind::PageRow(page_id.clone()));
 
                     let mut page_row = div()
                         .id(("page-row", hash_str(&page_id)))
-                        .px(px(4.0))
-                        .py(px(2.0))
+                        .relative()
+                        .px(px(6.0))
+                        .py(px(3.0))
                         .rounded(px(4.0))
-                        .cursor_pointer();
+                        .cursor_grab();
+
                     if is_active {
                         page_row =
                             page_row.bg(rgb(crate::constants::colors::onenote_page_selected()));
                     }
+
+                    if is_this_dragging {
+                        page_row = page_row
+                            .opacity(0.45)
+                            .border_1()
+                            .border_color(rgb(crate::constants::colors::onenote_accent()))
+                            .cursor_grabbing();
+                    } else {
+                        page_row = page_row
+                            .hover(|s| s.bg(rgb(crate::constants::colors::onenote_tab_idle())));
+                    }
+
                     let menu_page_id = click_id.clone();
                     let menu_sec_id = active_sec_id.clone();
                     page_row = page_row
-                        .hover(|s| s.bg(rgb(crate::constants::colors::onenote_tab_idle())))
                         .on_mouse_down(
                             MouseButton::Left,
-                            cx.listener(move |this, _, _, cx| {
+                            cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
                                 if this.active_page_id.as_deref() != Some(click_id.as_str()) {
                                     this.switch_to_page(
                                         active_sec_id.clone(),
@@ -178,6 +225,11 @@ impl NotesApp {
                                 }
                                 this.section_menu_at = None;
                                 this.page_menu_at = None;
+                                this.page_drag_source_id = Some(click_id.clone());
+                                this.page_drag_start_pos =
+                                    Some((event.position.x.as_f32(), event.position.y.as_f32()));
+                                this.is_dragging_page = false;
+                                this.page_drop_slot = None;
                                 cx.stop_propagation();
                                 cx.notify();
                             }),
@@ -185,6 +237,8 @@ impl NotesApp {
                         .on_mouse_down(
                             MouseButton::Right,
                             cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                                this.page_drag_source_id = None;
+                                this.is_dragging_page = false;
                                 if this.active_page_id.as_deref() != Some(menu_page_id.as_str()) {
                                     this.switch_to_page(
                                         menu_sec_id.clone(),
@@ -205,28 +259,51 @@ impl NotesApp {
                                 cx.notify();
                             }),
                         )
+                        .child(row_bounds)
                         .flex()
-                        .justify_between()
                         .items_center()
-                        .gap(px(8.0))
+                        .justify_between()
+                        .gap(px(6.0))
                         .child(
                             div()
-                                .font_family("Calibri")
-                                .text_size(px(self.page_list_font_size))
-                                .text_color(rgb(crate::constants::colors::onenote_ink()))
-                                .font_weight(if is_active {
-                                    gpui::FontWeight::BOLD
-                                } else {
-                                    gpui::FontWeight::NORMAL
-                                })
-                                .child(if page.name.trim().is_empty() {
-                                    "Untitled Page".to_owned()
-                                } else {
-                                    page.name.clone()
-                                }),
+                                .flex()
+                                .items_center()
+                                .gap(px(6.0))
+                                .child(
+                                    div()
+                                        .font_family("Calibri")
+                                        .text_size(px(11.0))
+                                        .text_color(if is_this_dragging {
+                                            rgb(crate::constants::colors::onenote_accent())
+                                        } else {
+                                            rgb(crate::constants::colors::onenote_ink_muted())
+                                        })
+                                        .opacity(if is_this_dragging { 1.0 } else { 0.5 })
+                                        .child("⠿"),
+                                )
+                                .child(
+                                    div()
+                                        .font_family("Calibri")
+                                        .text_size(px(self.page_list_font_size))
+                                        .text_color(rgb(crate::constants::colors::onenote_ink()))
+                                        .font_weight(if is_active {
+                                            gpui::FontWeight::BOLD
+                                        } else {
+                                            gpui::FontWeight::NORMAL
+                                        })
+                                        .child(if page.name.trim().is_empty() {
+                                            "Untitled Page".to_owned()
+                                        } else {
+                                            page.name.clone()
+                                        }),
+                                ),
                         );
 
                     page_elements.push(page_row.into_any_element());
+
+                    if is_dragging && drop_slot == Some(idx + 1) {
+                        page_elements.push(self.render_page_drop_indicator());
+                    }
                 }
 
                 let add_page_btn = if self.is_editing {

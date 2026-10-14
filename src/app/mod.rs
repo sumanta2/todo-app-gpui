@@ -238,6 +238,22 @@ pub struct NotesApp {
     pub(crate) page_sidebar_resizing: bool,
     pub(crate) page_sidebar_resize_start_x: f32,
     pub(crate) page_sidebar_resize_start_w: f32,
+    /// Page being dragged to reorder in the pages list.
+    pub(crate) page_drag_source_id: Option<String>,
+    pub(crate) page_drag_start_pos: Option<(f32, f32)>,
+    pub(crate) is_dragging_page: bool,
+    pub(crate) page_drop_slot: Option<usize>,
+    pub(crate) page_row_bounds: std::collections::HashMap<String, (f32, f32)>,
+    /// Section ID of the tab currently selected for drag-and-drop reordering.
+    pub(crate) section_drag_source_id: Option<String>,
+    /// Pointer screen coordinates (x, y) at mouse down, used to enforce the 4px movement threshold.
+    pub(crate) section_drag_start_pos: Option<(f32, f32)>,
+    /// Whether the user has exceeded the displacement threshold and horizontal section dragging is active.
+    pub(crate) is_dragging_section: bool,
+    /// Target insertion index (0..=sections.len()) where the drop indicator line is shown.
+    pub(crate) section_drop_slot: Option<usize>,
+    /// Cached horizontal origin and width (origin_x, width) of each section tab for midpoint hit-testing.
+    pub(crate) section_tab_bounds: std::collections::HashMap<String, (f32, f32)>,
     /// Whether the Home formatting menu is open.
     pub(crate) home_menu_open: bool,
     /// Whether the View ribbon menu is open.

@@ -109,6 +109,7 @@ fn editor_in(cx: &mut gpui::App) -> NotesApp {
                     name: "Page".to_string(),
                     body: String::new(),
                     images: None,
+                    created_at: None,
                 }],
             }],
         }),
@@ -132,6 +133,16 @@ fn editor_in(cx: &mut gpui::App) -> NotesApp {
         page_sidebar_resizing: false,
         page_sidebar_resize_start_x: 0.0,
         page_sidebar_resize_start_w: 180.0,
+        page_drag_source_id: None,
+        page_drag_start_pos: None,
+        is_dragging_page: false,
+        page_drop_slot: None,
+        page_row_bounds: std::collections::HashMap::new(),
+        section_drag_source_id: None,
+        section_drag_start_pos: None,
+        is_dragging_section: false,
+        section_drop_slot: None,
+        section_tab_bounds: std::collections::HashMap::new(),
         home_menu_open: false,
         view_menu_open: false,
         zoom_menu_open: false,
@@ -398,6 +409,7 @@ fn adding_a_page_can_be_undone() {
         name: "Page 2".to_string(),
         body: String::new(),
         images: None,
+        created_at: None,
     });
     apply_undo(app);
     let pages = &app.edit_content.as_ref().expect("notebook").sections[0].pages;
@@ -449,5 +461,213 @@ fn the_stack_keeps_the_newest_one_hundred_steps() {
     assert_eq!(app.history.undo.len(), 100);
     apply_undo(app);
     assert_eq!(app.edit_heading, "Page 103");
+    });
+}
+
+#[test]
+fn page_reorder_moves_top_bottom_and_undoes() {
+    with_editor(|app| {
+        let sec = &mut app.edit_content.as_mut().unwrap().sections[0];
+        sec.pages = vec![
+            NotePage {
+                id: "page-1".to_string(),
+                name: "Page 1".to_string(),
+                body: String::new(),
+                images: None,
+                created_at: None,
+            },
+            NotePage {
+                id: "page-2".to_string(),
+                name: "Page 2".to_string(),
+                body: String::new(),
+                images: None,
+                created_at: None,
+            },
+            NotePage {
+                id: "page-3".to_string(),
+                name: "Page 3".to_string(),
+                body: String::new(),
+                images: None,
+                created_at: None,
+            },
+        ];
+
+        // Drag page-2 to top (slot 0)
+        let moved = app.move_page("page-2", 0);
+        assert!(moved);
+        let sec = &app.edit_content.as_ref().unwrap().sections[0];
+        let ids: Vec<&str> = sec.pages.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, vec!["page-2", "page-1", "page-3"]);
+
+        // Drag page-1 to bottom (slot 3)
+        let moved = app.move_page("page-1", 3);
+        assert!(moved);
+        let sec = &app.edit_content.as_ref().unwrap().sections[0];
+        let ids: Vec<&str> = sec.pages.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, vec!["page-2", "page-3", "page-1"]);
+
+        // Moving to same location should no-op
+        assert!(!app.move_page("page-1", 2));
+        assert!(!app.move_page("page-1", 3));
+
+        // Undo moves page-1 back from bottom
+        apply_undo(app);
+        let sec = &app.edit_content.as_ref().unwrap().sections[0];
+        let ids: Vec<&str> = sec.pages.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, vec!["page-2", "page-1", "page-3"]);
+
+        // Undo moves page-2 back from top
+        apply_undo(app);
+        let sec = &app.edit_content.as_ref().unwrap().sections[0];
+        let ids: Vec<&str> = sec.pages.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, vec!["page-1", "page-2", "page-3"]);
+
+        // Redo puts page-2 at top
+        apply_redo(app);
+        let sec = &app.edit_content.as_ref().unwrap().sections[0];
+        let ids: Vec<&str> = sec.pages.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, vec!["page-2", "page-1", "page-3"]);
+
+        // Redo puts page-1 at bottom
+        apply_redo(app);
+        let sec = &app.edit_content.as_ref().unwrap().sections[0];
+        let ids: Vec<&str> = sec.pages.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, vec!["page-2", "page-3", "page-1"]);
+    });
+}
+
+#[test]
+fn section_reorder_moves_left_right_and_undoes() {
+    with_editor(|app| {
+        let content = app.edit_content.as_mut().unwrap();
+        content.sections = vec![
+            NoteSection {
+                id: "sec-1".to_string(),
+                name: "Section 1".to_string(),
+                pages: vec![NotePage {
+                    id: "p1".to_string(),
+                    name: "Page 1".to_string(),
+                    body: String::new(),
+                    images: None,
+                    created_at: None,
+                }],
+            },
+            NoteSection {
+                id: "sec-2".to_string(),
+                name: "Section 2".to_string(),
+                pages: vec![NotePage {
+                    id: "p2".to_string(),
+                    name: "Page 2".to_string(),
+                    body: String::new(),
+                    images: None,
+                    created_at: None,
+                }],
+            },
+            NoteSection {
+                id: "sec-3".to_string(),
+                name: "Section 3".to_string(),
+                pages: vec![NotePage {
+                    id: "p3".to_string(),
+                    name: "Page 3".to_string(),
+                    body: String::new(),
+                    images: None,
+                    created_at: None,
+                }],
+            },
+        ];
+
+        // Drag sec-2 to leftmost (slot 0)
+        let moved = app.move_section("sec-2", 0);
+        assert!(moved);
+        let ids: Vec<&str> = app
+            .edit_content
+            .as_ref()
+            .unwrap()
+            .sections
+            .iter()
+            .map(|s| s.id.as_str())
+            .collect();
+        assert_eq!(ids, vec!["sec-2", "sec-1", "sec-3"]);
+
+        // Drag sec-1 to rightmost (slot 3)
+        let moved = app.move_section("sec-1", 3);
+        assert!(moved);
+        let ids: Vec<&str> = app
+            .edit_content
+            .as_ref()
+            .unwrap()
+            .sections
+            .iter()
+            .map(|s| s.id.as_str())
+            .collect();
+        assert_eq!(ids, vec!["sec-2", "sec-3", "sec-1"]);
+
+        // Moving to same location should no-op
+        assert!(!app.move_section("sec-1", 2));
+        assert!(!app.move_section("sec-1", 3));
+
+        // Undo moves sec-1 back from rightmost
+        apply_undo(app);
+        let ids: Vec<&str> = app
+            .edit_content
+            .as_ref()
+            .unwrap()
+            .sections
+            .iter()
+            .map(|s| s.id.as_str())
+            .collect();
+        assert_eq!(ids, vec!["sec-2", "sec-1", "sec-3"]);
+
+        // Undo moves sec-2 back from leftmost
+        apply_undo(app);
+        let ids: Vec<&str> = app
+            .edit_content
+            .as_ref()
+            .unwrap()
+            .sections
+            .iter()
+            .map(|s| s.id.as_str())
+            .collect();
+        assert_eq!(ids, vec!["sec-1", "sec-2", "sec-3"]);
+
+        // Redo puts sec-2 at leftmost
+        apply_redo(app);
+        let ids: Vec<&str> = app
+            .edit_content
+            .as_ref()
+            .unwrap()
+            .sections
+            .iter()
+            .map(|s| s.id.as_str())
+            .collect();
+        assert_eq!(ids, vec!["sec-2", "sec-1", "sec-3"]);
+
+        // Redo puts sec-1 at rightmost
+        apply_redo(app);
+        let ids: Vec<&str> = app
+            .edit_content
+            .as_ref()
+            .unwrap()
+            .sections
+            .iter()
+            .map(|s| s.id.as_str())
+            .collect();
+        assert_eq!(ids, vec!["sec-2", "sec-3", "sec-1"]);
+    });
+}
+
+#[test]
+fn active_page_created_date_resolves_and_falls_back() {
+    with_editor(|app| {
+        // Initially, note created_at is empty in with_editor helper,
+        // but active_page_created_date returns a non-empty timestamp string
+        let date = app.active_page_created_date();
+        assert!(!date.trim().is_empty());
+
+        // When page has an explicit created_at, that exact string is returned
+        if let Some(content) = app.edit_content.as_mut() {
+            content.sections[0].pages[0].created_at = Some("Oct 14, 2026 10:00 AM".to_string());
+        }
+        assert_eq!(app.active_page_created_date(), "Oct 14, 2026 10:00 AM");
     });
 }

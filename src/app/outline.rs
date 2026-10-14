@@ -198,6 +198,9 @@ impl NotesApp {
         if let Some(ref mut content) = self.edit_content {
             let new_sec_id = chrono::Local::now().timestamp_millis().to_string();
             let new_page_id = format!("{}_page", new_sec_id);
+            let created_at = chrono::Local::now()
+                .format("%b %d, %Y %I:%M %p")
+                .to_string();
             let new_section = NoteSection {
                 id: new_sec_id.clone(),
                 name: format!("Section {}", content.sections.len() + 1),
@@ -206,6 +209,7 @@ impl NotesApp {
                     name: "Page 1".to_string(),
                     body: String::new(),
                     images: None,
+                    created_at: Some(created_at),
                 }],
             };
             content.sections.push(new_section);
@@ -262,11 +266,15 @@ impl NotesApp {
             if let Some(ref sec_id) = self.active_section_id {
                 if let Some(section) = content.sections.iter_mut().find(|s| s.id == *sec_id) {
                     let new_page_id = chrono::Local::now().timestamp_millis().to_string();
+                    let created_at = chrono::Local::now()
+                        .format("%b %d, %Y %I:%M %p")
+                        .to_string();
                     let new_page = NotePage {
                         id: new_page_id.clone(),
                         name: format!("Page {}", section.pages.len() + 1),
                         body: String::new(),
                         images: None,
+                        created_at: Some(created_at),
                     };
                     section.pages.push(new_page);
                     self.note_dirty = true;
@@ -313,4 +321,357 @@ impl NotesApp {
             cx.notify();
         }
     }
+
+    /// Reorders a page within the active section to the specified target slot.
+    ///
+    /// Slot 0 places the page at the very top.
+    /// Slot `pages.len()` places the page at the very bottom.
+    /// If the page actually changes position, an undo snapshot is recorded and changes are persisted.
+    pub(crate) fn move_page(&mut self, page_id: &str, target_slot: usize) -> bool {
+        if self.is_editing {
+            self.sync_current_page_state();
+        }
+
+        let Some(sec_id) = self.active_section_id.clone() else {
+            return false;
+        };
+
+        // Check whether the page will actually move before calling record_edit
+        let will_move = if self.is_editing {
+            if let Some(ref content) = self.edit_content {
+                if let Some(section) = content.sections.iter().find(|s| s.id == sec_id) {
+                    if let Some(source_idx) = section.pages.iter().position(|p| p.id == page_id) {
+                        let num_pages = section.pages.len();
+                        let target_slot = target_slot.min(num_pages);
+                        target_slot != source_idx && target_slot != source_idx + 1
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if will_move {
+            self.record_edit(crate::app::history::EditKind::Structure);
+        }
+
+        let mut changed = false;
+
+        if let Some(ref mut content) = self.edit_content {
+            if let Some(section) = content.sections.iter_mut().find(|s| s.id == sec_id) {
+                if reorder_pages_vec(&mut section.pages, page_id, target_slot) {
+                    self.note_dirty = true;
+                    self.persist_edit();
+                    changed = true;
+                }
+            }
+        }
+
+        if let Some(ref mut content) = self.view_content {
+            if let Some(section) = content.sections.iter_mut().find(|s| s.id == sec_id) {
+                if reorder_pages_vec(&mut section.pages, page_id, target_slot) {
+                    changed = true;
+                }
+            }
+        }
+
+        changed
+    }
+
+    /// Updates the drag state of a page in the pages list as the pointer moves.
+    ///
+    /// Determines whether the drag threshold has been passed and calculates the target
+    /// drop slot based on vertical pointer position relative to page rows.
+    pub(crate) fn update_page_drag(&mut self, mouse_x: f32, mouse_y: f32) -> bool {
+        let Some(ref _source_id) = self.page_drag_source_id else {
+            return false;
+        };
+        let Some((start_x, start_y)) = self.page_drag_start_pos else {
+            return false;
+        };
+
+        if !self.is_dragging_page {
+            let dy = (mouse_y - start_y).abs();
+            let dx = (mouse_x - start_x).abs();
+            if dy > 4.0 || dx > 4.0 {
+                self.is_dragging_page = true;
+            } else {
+                return false;
+            }
+        }
+
+        let active_pages: Vec<String> = if let Some(ref content) = self.edit_content {
+            content
+                .sections
+                .iter()
+                .find(|s| Some(&s.id) == self.active_section_id.as_ref())
+                .map(|s| s.pages.iter().map(|p| p.id.clone()).collect())
+                .unwrap_or_default()
+        } else if let Some(ref content) = self.view_content {
+            content
+                .sections
+                .iter()
+                .find(|s| Some(&s.id) == self.active_section_id.as_ref())
+                .map(|s| s.pages.iter().map(|p| p.id.clone()).collect())
+                .unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+
+        if active_pages.is_empty() {
+            return false;
+        }
+
+        // Default to the very bottom slot
+        let mut new_slot = active_pages.len();
+
+        for (idx, page_id) in active_pages.iter().enumerate() {
+            if let Some(&(top_y, height)) = self.page_row_bounds.get(page_id) {
+                let midpoint = top_y + height * 0.5;
+                if mouse_y < midpoint {
+                    new_slot = idx;
+                    break;
+                }
+            }
+        }
+
+        if self.page_drop_slot != Some(new_slot) {
+            self.page_drop_slot = Some(new_slot);
+            return true;
+        }
+
+        false
+    }
+
+    /// Concludes an active page drag-and-drop gesture and applies the reorder if valid.
+    pub(crate) fn finish_page_drag(&mut self, cx: &mut Context<Self>) -> bool {
+        let was_dragging = self.is_dragging_page;
+        let source_id = self.page_drag_source_id.take();
+        let target_slot = self.page_drop_slot.take();
+        self.page_drag_start_pos = None;
+        self.is_dragging_page = false;
+
+        if was_dragging {
+            if let (Some(source_id), Some(slot)) = (source_id, target_slot) {
+                let moved = self.move_page(&source_id, slot);
+                if moved {
+                    cx.notify();
+                }
+                return moved;
+            }
+        }
+        false
+    }
+
+    /// Reorders a section within the current note to the specified target slot.
+    ///
+    /// Slot 0 places the section at the leftmost position.
+    /// Slot `sections.len()` places the section at the rightmost position.
+    ///
+    /// Flow:
+    /// 1. Syncs active page editor state before mutating structure.
+    /// 2. Performs a pre-check without mutable borrow to see if the move modifies the section order.
+    /// 3. Records an undo snapshot (`EditKind::Structure`) only if the section actually changes position.
+    /// 4. Mutably updates sections vector via `reorder_sections_vec`, marks dirty, and autosaves.
+    pub(crate) fn move_section(&mut self, section_id: &str, target_slot: usize) -> bool {
+        if self.is_editing {
+            self.sync_current_page_state();
+        }
+
+        // Check whether the section will actually move before calling record_edit.
+        // This avoids creating empty/redundant undo entries when dropping back into the same place.
+        let will_move = if self.is_editing {
+            if let Some(ref content) = self.edit_content {
+                if let Some(source_idx) = content.sections.iter().position(|s| s.id == section_id) {
+                    let num_sections = content.sections.len();
+                    let target_slot = target_slot.min(num_sections);
+                    target_slot != source_idx && target_slot != source_idx + 1
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        if will_move {
+            self.record_edit(crate::app::history::EditKind::Structure);
+        }
+
+        let mut changed = false;
+
+        // Apply to editable content model (edit mode)
+        if let Some(ref mut content) = self.edit_content {
+            if reorder_sections_vec(&mut content.sections, section_id, target_slot) {
+                self.note_dirty = true;
+                self.persist_edit();
+                changed = true;
+            }
+        }
+
+        // Also update view content model (viewer mode) if open
+        if let Some(ref mut content) = self.view_content {
+            if reorder_sections_vec(&mut content.sections, section_id, target_slot) {
+                changed = true;
+            }
+        }
+
+        changed
+    }
+
+    /// Updates the drag state of a section tab as the pointer moves horizontally.
+    ///
+    /// Functionality:
+    /// - Checks for an initial 4px displacement threshold before activating drag mode to avoid
+    ///   triggering reorders on simple clicks.
+    /// - Compares the pointer's horizontal coordinate against the center midpoint of each section tab
+    ///   (using values captured by `section_tab_bounds`).
+    /// - When mouse_x is left of tab `k`'s midpoint, the target insertion slot is `k` (before tab `k`).
+    /// - If mouse_x is right of all tab midpoints, the target insertion slot is `N` (after the last tab).
+    /// - Returns `true` if the drop slot changed, signalling GPUI to repaint the drop indicator.
+    pub(crate) fn update_section_drag(&mut self, mouse_x: f32, mouse_y: f32) -> bool {
+        let Some(ref _source_id) = self.section_drag_source_id else {
+            return false;
+        };
+        let Some((start_x, start_y)) = self.section_drag_start_pos else {
+            return false;
+        };
+
+        // Enforce intentional drag threshold: user must move > 4px before drag mode engages
+        if !self.is_dragging_section {
+            let dx = (mouse_x - start_x).abs();
+            let dy = (mouse_y - start_y).abs();
+            if dx > 4.0 || dy > 4.0 {
+                self.is_dragging_section = true;
+            } else {
+                return false;
+            }
+        }
+
+        let section_ids: Vec<String> = if let Some(ref content) = self.edit_content {
+            content.sections.iter().map(|s| s.id.clone()).collect()
+        } else if let Some(ref content) = self.view_content {
+            content.sections.iter().map(|s| s.id.clone()).collect()
+        } else {
+            Vec::new()
+        };
+
+        if section_ids.is_empty() {
+            return false;
+        }
+
+        // Default insertion point is at the very end of the tab list
+        let mut new_slot = section_ids.len();
+
+        // Find the first tab whose midpoint the pointer is to the left of
+        for (idx, sec_id) in section_ids.iter().enumerate() {
+            if let Some(&(left_x, width)) = self.section_tab_bounds.get(sec_id) {
+                let midpoint = left_x + width * 0.5;
+                if mouse_x < midpoint {
+                    new_slot = idx;
+                    break;
+                }
+            }
+        }
+
+        // Only trigger repaint if the drop target slot actually changed
+        if self.section_drop_slot != Some(new_slot) {
+            self.section_drop_slot = Some(new_slot);
+            return true;
+        }
+
+        false
+    }
+
+    /// Concludes an active section drag-and-drop gesture and applies the reorder if valid.
+    ///
+    /// Resets pointer drag tracking fields and calls `move_section` with the target slot.
+    pub(crate) fn finish_section_drag(&mut self, cx: &mut Context<Self>) -> bool {
+        let was_dragging = self.is_dragging_section;
+        let source_id = self.section_drag_source_id.take();
+        let target_slot = self.section_drop_slot.take();
+        self.section_drag_start_pos = None;
+        self.is_dragging_section = false;
+
+        if was_dragging {
+            if let (Some(source_id), Some(slot)) = (source_id, target_slot) {
+                let moved = self.move_section(&source_id, slot);
+                if moved {
+                    cx.notify();
+                }
+                return moved;
+            }
+        }
+        false
+    }
+}
+
+/// Helper to reorder a page inside a pages vector given a target insertion slot (0..=pages.len()).
+/// Slot 0 inserts before index 0 (top).
+/// Slot N inserts after index N-1 (bottom).
+/// Returns true if the order was modified.
+pub(crate) fn reorder_pages_vec(
+    pages: &mut Vec<NotePage>,
+    page_id: &str,
+    target_slot: usize,
+) -> bool {
+    let Some(source_idx) = pages.iter().position(|p| p.id == page_id) else {
+        return false;
+    };
+    let num_pages = pages.len();
+    let target_slot = target_slot.min(num_pages);
+    if target_slot == source_idx || target_slot == source_idx + 1 {
+        return false;
+    }
+    let page = pages.remove(source_idx);
+    let insert_idx = if target_slot > source_idx {
+        target_slot - 1
+    } else {
+        target_slot
+    };
+    let insert_idx = insert_idx.min(pages.len());
+    pages.insert(insert_idx, page);
+    true
+}
+
+/// Helper to reorder a section inside a sections vector given a target insertion slot (0..=sections.len()).
+///
+/// Behavior & Index Math:
+/// - Target slot `0` inserts before index 0 (leftmost position).
+/// - Target slot `N` inserts after the last item (rightmost position).
+/// - If `target_slot == source_idx` or `target_slot == source_idx + 1`, the section is dropped in place
+///   and no modification occurs (returns `false`).
+/// - When moving rightward (`target_slot > source_idx`), removing `source_idx` shifts subsequent elements left by 1,
+///   so the target insertion index is adjusted to `target_slot - 1`.
+/// - Returns `true` if the vector elements were reordered.
+pub(crate) fn reorder_sections_vec(
+    sections: &mut Vec<NoteSection>,
+    section_id: &str,
+    target_slot: usize,
+) -> bool {
+    let Some(source_idx) = sections.iter().position(|s| s.id == section_id) else {
+        return false;
+    };
+    let num_sections = sections.len();
+    let target_slot = target_slot.min(num_sections);
+    if target_slot == source_idx || target_slot == source_idx + 1 {
+        return false;
+    }
+    let section = sections.remove(source_idx);
+    let insert_idx = if target_slot > source_idx {
+        target_slot - 1
+    } else {
+        target_slot
+    };
+    let insert_idx = insert_idx.min(sections.len());
+    sections.insert(insert_idx, section);
+    true
 }

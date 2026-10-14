@@ -7,12 +7,35 @@ mod section_name;
 use gpui::{div, prelude::*, px, rgb, AnyElement, Context, FontWeight, IntoElement, MouseButton, Window};
 
 use crate::app::NotesApp;
+use crate::canvas::{bounds_tracker, BoundsKind};
 use crate::constants::typography::BUTTON_FONT_SIZE;
 use crate::helpers::hash_str;
 use crate::models::NoteContent;
 use crate::text::shaping::{shaped_uniform_prefix, UniformFace};
 
 impl NotesApp {
+    /// Visual indicator showing the target insertion point when dragging section tabs horizontally.
+    pub(crate) fn render_section_drop_indicator(&self) -> AnyElement {
+        div()
+            .id("sec-drop-indicator")
+            .w(px(2.5))
+            .h(px(20.0))
+            .mx(px(1.0))
+            .bg(rgb(crate::constants::colors::onenote_accent()))
+            .rounded(px(1.5))
+            .flex()
+            .flex_col()
+            .items_center()
+            .child(
+                div()
+                    .w(px(6.0))
+                    .h(px(6.0))
+                    .rounded_full()
+                    .bg(rgb(crate::constants::colors::onenote_accent())),
+            )
+            .into_any_element()
+    }
+
     pub(crate) fn build_section_tabs(
         &mut self,
         content: &NoteContent,
@@ -23,11 +46,28 @@ impl NotesApp {
         let mut current_tab_x = self.layout_sidebar_w();
         let mut active_tab_x = current_tab_x + 6.0;
         let mut tabs = Vec::new();
+        // Section tabs drag-and-drop state: tracks whether the user is currently dragging a section tab,
+        // which tab is being dragged, and which slot (insertion point) should show the drop indicator.
+        let is_dragging = self.is_dragging_section;
+        let dragging_id = self.section_drag_source_id.clone();
+        let drop_slot = self.section_drop_slot;
 
-        for sec in &content.sections {
+        // If the dragged tab is hovered before the first tab (slot 0), render the drop indicator at the start.
+        if is_dragging && drop_slot == Some(0) {
+            tabs.push(self.render_section_drop_indicator());
+        }
+
+        for (idx, sec) in content.sections.iter().enumerate() {
             let sec_id = sec.id.clone();
             let is_active = Some(&sec_id) == self.active_section_id.as_ref();
             let click_id = sec_id.clone();
+            let is_this_dragging = is_dragging && dragging_id.as_deref() == Some(&sec_id);
+
+            // Records this tab's window X and width so drag hit-testing uses real midpoints.
+            let tab_bounds = bounds_tracker(
+                cx.entity().clone(),
+                BoundsKind::SectionTab(sec_id.clone()),
+            );
 
             if is_active {
                 active_tab_x = current_tab_x + 6.0;
@@ -35,20 +75,35 @@ impl NotesApp {
 
             let mut tab_el = div()
                 .id(("sec-tab", hash_str(&sec_id)))
+                .relative()
                 .px(px(10.0))
                 .py(px(4.0))
                 .font_family("Calibri")
                 .text_size(px(self.section_name_font_size))
+                .cursor_grab()
                 .bg(if is_active {
                     rgb(crate::constants::colors::onenote_page_selected())
                 } else {
                     rgb(crate::constants::colors::onenote_tab_idle())
                 });
-            tab_el = tab_el.border_t_2().border_color(if is_active {
-                rgb(crate::constants::colors::onenote_accent())
+
+            // Visual feedback while dragging:
+            // The tab being dragged receives 45% opacity, an accent border, and a 'grabbing' cursor.
+            // Other tabs retain their standard idle or active top-border styling.
+            if is_this_dragging {
+                tab_el = tab_el
+                    .opacity(0.45)
+                    .border_1()
+                    .border_color(rgb(crate::constants::colors::onenote_accent()))
+                    .cursor_grabbing();
             } else {
-                rgb(crate::constants::colors::onenote_tab_idle())
-            });
+                tab_el = tab_el.border_t_2().border_color(if is_active {
+                    rgb(crate::constants::colors::onenote_accent())
+                } else {
+                    rgb(crate::constants::colors::onenote_tab_idle())
+                });
+            }
+
             tab_el = tab_el
                 .text_color(if is_active {
                     rgb(crate::constants::colors::onenote_ink())
@@ -62,11 +117,12 @@ impl NotesApp {
                 });
             let menu_id = click_id.clone();
             tab_el = tab_el
-                .cursor_pointer()
                 .hover(|style| style.bg(rgb(crate::constants::colors::onenote_tab_hover())))
+                // Mouse down initiates the drag sequence: sets the candidate source section ID
+                // and mouse start position. A small movement threshold (6px) prevents accidental drags.
                 .on_mouse_down(
                     MouseButton::Left,
-                    cx.listener(move |this, _, _, cx| {
+                    cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
                         if !this.section_renaming
                             && this.active_section_id.as_deref() != Some(click_id.as_str())
                         {
@@ -74,6 +130,11 @@ impl NotesApp {
                         }
                         this.section_menu_at = None;
                         this.page_menu_at = None;
+                        this.section_drag_source_id = Some(click_id.clone());
+                        this.section_drag_start_pos =
+                            Some((event.position.x.as_f32(), event.position.y.as_f32()));
+                        this.is_dragging_section = false;
+                        this.section_drop_slot = None;
                         cx.stop_propagation();
                         cx.notify();
                     }),
@@ -81,6 +142,8 @@ impl NotesApp {
                 .on_mouse_down(
                     MouseButton::Right,
                     cx.listener(move |this, event: &gpui::MouseDownEvent, _, cx| {
+                        this.section_drag_source_id = None;
+                        this.is_dragging_section = false;
                         if this.active_section_id.as_deref() != Some(menu_id.as_str()) {
                             this.switch_to_section(menu_id.clone(), cx);
                         }
@@ -95,9 +158,23 @@ impl NotesApp {
                         cx.notify();
                     }),
                 )
+                .child(tab_bounds)
                 .flex()
                 .items_center()
-                .gap(px(6.0));
+                .gap(px(5.0))
+                // Visual drag handle grip indicator (⠿) showing the tab is draggable
+                .child(
+                    div()
+                        .font_family("Calibri")
+                        .text_size(px(10.0))
+                        .text_color(if is_this_dragging {
+                            rgb(crate::constants::colors::onenote_accent())
+                        } else {
+                            rgb(crate::constants::colors::onenote_ink_muted())
+                        })
+                        .opacity(if is_this_dragging { 1.0 } else { 0.5 })
+                        .child("⠿"),
+                );
 
             if is_active && self.section_renaming {
                 tab_el = tab_el.child(self.build_section_name_editor(is_section_name_focused, cx));
@@ -106,6 +183,10 @@ impl NotesApp {
             }
 
             tabs.push(tab_el.into_any_element());
+
+            if is_dragging && drop_slot == Some(idx + 1) {
+                tabs.push(self.render_section_drop_indicator());
+            }
 
             // Track horizontal offset for following tabs
             let tab_text = if is_active {
@@ -135,7 +216,7 @@ impl NotesApp {
             .last()
             .copied()
             .unwrap_or(0.0);
-            current_tab_x += 12.0 + text_w + 4.0;
+            current_tab_x += 16.0 + text_w + 4.0;
         }
 
         self.active_section_tab_x = active_tab_x;

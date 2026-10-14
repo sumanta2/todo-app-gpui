@@ -102,6 +102,22 @@ impl NotesApp {
 
         // Shortcut: Escape closes the Home menu or clears the current selection.
         if key.eq_ignore_ascii_case("escape") {
+            if self.is_dragging_page || self.page_drag_source_id.is_some() {
+                self.is_dragging_page = false;
+                self.page_drag_source_id = None;
+                self.page_drop_slot = None;
+                self.page_drag_start_pos = None;
+                cx.notify();
+                return;
+            }
+            if self.is_dragging_section || self.section_drag_source_id.is_some() {
+                self.is_dragging_section = false;
+                self.section_drag_source_id = None;
+                self.section_drop_slot = None;
+                self.section_drag_start_pos = None;
+                cx.notify();
+                return;
+            }
             if self.section_menu_at.is_some() || self.page_menu_at.is_some() {
                 self.section_menu_at = None;
                 self.page_menu_at = None;

@@ -63,15 +63,36 @@ impl Render for NotesApp {
                 this.handle_key(event, cx);
             }))
             .on_mouse_move(cx.listener(|this, event: &gpui::MouseMoveEvent, _, cx| {
-                if this.drag_page_sidebar(event.position.x.as_f32()) {
+                let mut changed = this.drag_page_sidebar(event.position.x.as_f32());
+                if this.page_drag_source_id.is_some() {
+                    if this.update_page_drag(event.position.x.as_f32(), event.position.y.as_f32()) {
+                        changed = true;
+                    }
+                }
+                if this.section_drag_source_id.is_some() {
+                    if this.update_section_drag(event.position.x.as_f32(), event.position.y.as_f32()) {
+                        changed = true;
+                    }
+                }
+                if changed {
                     cx.notify();
                 }
             }))
             .on_mouse_up(
                 gpui::MouseButton::Left,
                 cx.listener(|this, _, _, cx| {
+                    let mut changed = false;
                     if this.page_sidebar_resizing {
                         this.page_sidebar_resizing = false;
+                        changed = true;
+                    }
+                    if this.finish_page_drag(cx) {
+                        changed = true;
+                    }
+                    if this.finish_section_drag(cx) {
+                        changed = true;
+                    }
+                    if changed {
                         cx.notify();
                     }
                 }),

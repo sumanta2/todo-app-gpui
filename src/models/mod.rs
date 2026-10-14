@@ -15,6 +15,7 @@ pub(crate) struct Note {
     pub(crate) id: String,
     pub(crate) heading: String,
     pub(crate) body: String,
+    #[serde(default)]
     pub(crate) created_at: String,
     // Future-proof slots for screenshots, links, and markdown formatting
     pub(crate) images: Option<Vec<String>>,
@@ -29,6 +30,8 @@ pub(crate) struct NotePage {
     pub(crate) name: String,
     pub(crate) body: String,
     pub(crate) images: Option<Vec<String>>,
+    #[serde(default)]
+    pub(crate) created_at: Option<String>,
 }
 
 /// A logical section inside a note, containing one or more pages.
@@ -63,6 +66,7 @@ pub(crate) fn load_note_content(body: &str, legacy_images: &Option<Vec<String>>)
                     name: "Page 1".to_string(),
                     body: body.to_string(),
                     images: legacy_images.clone(),
+                    created_at: None,
                 }],
             }],
         }
